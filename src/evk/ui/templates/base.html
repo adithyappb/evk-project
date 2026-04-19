@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-950">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}EVK · Opportunities Pipeline{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+          crossorigin="anonymous"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter var', 'Inter', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            brand: {
+              50:'#eef4ff',100:'#dbe7ff',200:'#bfd2ff',300:'#93b1ff',400:'#6487ff',
+              500:'#4461ff',600:'#3044f0',700:'#2633d4',800:'#232eab',900:'#232f85',950:'#161b4d'
+            }
+          },
+          boxShadow: {
+            glow: '0 0 0 1px rgb(51 63 255 / 0.15), 0 8px 40px -12px rgb(51 63 255 / 0.35)',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+  <style>
+    html { font-feature-settings: 'cv02','cv03','cv04','cv11','ss01'; -webkit-font-smoothing: antialiased; }
+    /* Loading spinner */
+    .htmx-indicator { opacity: 0; transition: opacity 150ms ease; }
+    .htmx-request .htmx-indicator { opacity: 1; }
+    /* Smooth fragment swaps */
+    .fade-in { animation: fadeIn 180ms ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    /* Toast */
+    #toasts > * { animation: slideIn 220ms cubic-bezier(.2,.9,.3,1.2) both; }
+    #toasts > .toast-leaving { animation: slideOut 220ms ease forwards; pointer-events: none; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(16px) scale(.98); } to { opacity: 1; transform: none; } }
+    @keyframes slideOut { to { opacity: 0; transform: translateX(16px) scale(.98); } }
+    /* Countdown bar driven by --toast-ttl */
+    [data-toast-progress] { animation: toastProgress var(--toast-ttl, 4500ms) linear forwards; }
+    .toast.is-paused [data-toast-progress] { animation-play-state: paused; }
+    @keyframes toastProgress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+    /* Subtle scrollbar */
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb { background: rgb(30 41 59); border-radius: 10px; }
+    *::-webkit-scrollbar-thumb:hover { background: rgb(51 65 85); }
+  </style>
+</head>
+<body class="h-full font-sans text-slate-100 antialiased bg-gradient-to-b from-slate-950 via-slate-950 to-[#0a0f24]">
+  <div class="min-h-full flex flex-col">
+    <header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
+      <div class="mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
+        <div class="flex items-center gap-3">
+          <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center shadow-glow">
+            <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
+          </div>
+          <div class="leading-tight">
+            <div class="text-[11px] uppercase tracking-[0.18em] text-slate-400">EVK</div>
+            <div class="text-[15px] font-semibold text-white">Opportunities Pipeline</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-900/80 border border-slate-800 pl-2.5 pr-3 py-1 text-slate-300">
+            <span class="relative flex h-1.5 w-1.5">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+              <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+            </span>
+            {{ wiring.mode }} mode
+          </span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-slate-300 hover:bg-slate-800/80 transition"
+            title="repos: {{ wiring.repos }}&#10;inkbox: {{ wiring.inkbox }}&#10;gemini: {{ wiring.gemini }}">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+            wiring
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 mx-auto w-full max-w-6xl px-6 py-8">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-slate-800/60 py-4 text-center text-[11px] text-slate-500 tracking-wide">
+      Inkbox · Vertex AI Gemini · Firestore — <span class="text-slate-400">human-in-the-loop by default</span>
+    </footer>
+  </div>
+
+  <!-- Toasts (HTMX out-of-band) -->
+  <div id="toasts" aria-live="polite" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-[calc(100%-2rem)] sm:w-auto"></div>
+  <script>
+    (function () {
+      const MAX_TOASTS = 4;
+      const DEFAULT_TTL = 4500;
+
+      function dismiss(toast) {
+        if (!toast || toast.dataset.toastLeaving === '1') return;
+        toast.dataset.toastLeaving = '1';
+        toast.classList.add('toast-leaving');
+        if (toast._ttlTimer) clearTimeout(toast._ttlTimer);
+        toast.addEventListener('animationend', () => toast.remove(), { once: true });
+        setTimeout(() => toast.remove(), 400);
+      }
+
+      function armToast(toast) {
+        if (!toast || toast.dataset.toastArmed === '1') return;
+        toast.dataset.toastArmed = '1';
+        const ttl = parseInt(toast.dataset.toastTtl, 10) || DEFAULT_TTL;
+        toast.style.setProperty('--toast-ttl', ttl + 'ms');
+        toast._ttlTimer = setTimeout(() => dismiss(toast), ttl);
+        toast.addEventListener('mouseenter', () => {
+          toast.classList.add('is-paused');
+          if (toast._ttlTimer) { clearTimeout(toast._ttlTimer); toast._ttlTimer = null; }
+        });
+        toast.addEventListener('mouseleave', () => {
+          toast.classList.remove('is-paused');
+          if (!toast._ttlTimer) toast._ttlTimer = setTimeout(() => dismiss(toast), 1500);
+        });
+        const btn = toast.querySelector('[data-toast-close]');
+        if (btn) btn.addEventListener('click', () => dismiss(toast));
+      }
+
+      function armAll() {
+        const container = document.getElementById('toasts');
+        if (!container) return;
+        const toasts = container.querySelectorAll('[data-toast]');
+        toasts.forEach(armToast);
+        // Cap the stack: remove the oldest un-dismissed first.
+        const live = [...container.querySelectorAll('[data-toast]:not(.toast-leaving)')];
+        while (live.length > MAX_TOASTS) dismiss(live.shift());
+      }
+
+      // htmx fires `htmx:afterSwap` for the primary target and
+      // `htmx:oobAfterSwap` for out-of-band swaps. Arm on either.
+      document.body.addEventListener('htmx:afterSwap', armAll);
+      document.body.addEventListener('htmx:oobAfterSwap', armAll);
+      // Also arm whatever is already in the DOM at load.
+      document.addEventListener('DOMContentLoaded', armAll);
+
+      // ESC dismisses the most recent toast.
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const last = document.querySelector('#toasts [data-toast]:not(.toast-leaving):last-child');
+          if (last) { dismiss(last); e.preventDefault(); }
+        }
+      });
+
+      // Keyboard shortcuts: s/p/r/d for actions
+      window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.ctrlKey || e.metaKey) return;
+        const map = { s: '[data-shortcut="simulate"]', p: '[data-shortcut="poll"]', r: '[data-shortcut="remind"]', d: '[data-shortcut="digest"]' };
+        const sel = map[e.key?.toLowerCase()];
+        if (sel) { const el = document.querySelector(sel); if (el) { el.click(); e.preventDefault(); } }
+      });
+
+      // ---------------------------------------------------------------- //
+      // Stat-card navigation + draft-tab visual state                    //
+      // ---------------------------------------------------------------- //
+      function setActiveTab(value) {
+        document.querySelectorAll('[data-draft-tab]').forEach((btn) => {
+          const isActive = btn.dataset.draftTab === value;
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          btn.classList.toggle('bg-brand-600/20', isActive);
+          btn.classList.toggle('text-brand-200', isActive);
+          btn.classList.toggle('ring-1', isActive);
+          btn.classList.toggle('ring-brand-500/40', isActive);
+          btn.classList.toggle('text-slate-400', !isActive);
+          btn.classList.toggle('hover:text-slate-200', !isActive);
+          btn.classList.toggle('hover:bg-slate-800/60', !isActive);
+          const chip = btn.querySelector('.draft-tab-count');
+          if (chip) {
+            chip.classList.toggle('bg-brand-500/30', isActive);
+            chip.classList.toggle('text-brand-100', isActive);
+            chip.classList.toggle('bg-slate-800', !isActive);
+            chip.classList.toggle('text-slate-300', !isActive);
+          }
+        });
+      }
+
+      function smoothScrollTo(id) {
+        if (!id || id === '#') return;
+        const el = document.querySelector(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      // Stat cards: smooth-scroll + (optionally) trigger the matching tab.
+      document.body.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-stat-card]');
+        if (!card) return;
+        e.preventDefault();
+        const tab = card.dataset.activateTab;
+        if (tab) {
+          const btn = document.querySelector(`[data-draft-tab="${tab}"]`);
+          if (btn) { btn.click(); setActiveTab(tab); }
+        }
+        smoothScrollTo(card.getAttribute('href'));
+      });
+
+      // Keep tab visual state in sync when tabs are clicked directly.
+      document.body.addEventListener('click', (e) => {
+        const tab = e.target.closest('[data-draft-tab]');
+        if (!tab) return;
+        setActiveTab(tab.dataset.draftTab);
+      });
+    })();
+  </script>
+</body>
+</html>

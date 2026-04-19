@@ -1,0 +1,153 @@
+"""Gemini client — supports Vertex AI (production) and Gemini Developer API (local).
+
+Every call is: temperature <= 0.1 by default, schema-enforced (for structured
+output), retried 3x with bounded exponential backoff on transient failures.
+Schema validation is **not** retried — a malformed response is a hard fail.
+
+Selection logic:
+
+1. If `GOOGLE_API_KEY` is set → use Gemini Developer API (free tier, no GCP).
+2. Else if `EVK_MODE=production` → use Vertex AI with `GOOGLE_CLOUD_PROJECT`.
+3. Else → caller should use `evk.stubs.StubGemini` (handled by the agent factory).
+"""
+
+from __future__ import annotations
+
+from typing import TypeVar
+
+from google import genai
+from google.genai import types as genai_types
+from pydantic import BaseModel, ValidationError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from evk.config import get_settings
+from evk.logging import logger
+
+T = TypeVar("T", bound=BaseModel)
+
+# Per production mandate: deterministic output for classification & matching.
+_DEFAULT_TEMPERATURE = 0.1
+_MAX_ATTEMPTS = 3
+
+
+class GeminiError(RuntimeError):
+    """Raised when Gemini produces an unusable response (schema invalid / empty)."""
+
+
+class _TransientGeminiError(RuntimeError):
+    """Internal marker for retry-worthy failures."""
+
+
+class GeminiClient:
+    """Wraps the unified google-genai SDK, auto-routing to Dev API or Vertex AI."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._settings = settings
+        if settings.google_api_key:
+            self._client = genai.Client(api_key=settings.google_api_key)
+            self._backend = "gemini_dev_api"
+        else:
+            self._client = genai.Client(
+                vertexai=True,
+                project=settings.google_cloud_project,
+                location=settings.google_cloud_location,
+            )
+            self._backend = "vertex_ai"
+        logger.bind(backend=self._backend, model=settings.gemini_model).debug("gemini.init")
+
+    # --- public ------------------------------------------------------------
+
+    def generate_text(
+        self,
+        *,
+        prompt: str,
+        system_instruction: str | None = None,
+        temperature: float = _DEFAULT_TEMPERATURE,
+        max_output_tokens: int = 2048,
+    ) -> str:
+        config = genai_types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        )
+        return _call_with_retry(
+            self._client,
+            model=self._settings.gemini_model,
+            contents=prompt,
+            config=config,
+        )
+
+    def generate_structured(
+        self,
+        *,
+        prompt: str,
+        schema: type[T],
+        system_instruction: str | None = None,
+        temperature: float = _DEFAULT_TEMPERATURE,
+        max_output_tokens: int = 4096,
+    ) -> T:
+        config = genai_types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            response_mime_type="application/json",
+            response_schema=schema,
+        )
+        raw = _call_with_retry(
+            self._client,
+            model=self._settings.gemini_model,
+            contents=prompt,
+            config=config,
+        )
+        try:
+            return schema.model_validate_json(raw)
+        except ValidationError as exc:
+            # Schema failures are not retried: deterministic input + deterministic
+            # model at T=0.1 means a second shot would produce the same garbage.
+            logger.bind(raw=raw[:1000], schema=schema.__name__).error(
+                "gemini.structured_validation_failed"
+            )
+            raise GeminiError(f"Gemini returned invalid JSON for {schema.__name__}: {exc}") from exc
+
+    def healthcheck(self) -> bool:
+        """Cheap liveness ping — ~10 tokens, used by /healthz."""
+        try:
+            _ = self.generate_text(prompt="ping", max_output_tokens=4, temperature=0.0)
+            return True
+        except Exception:  # pragma: no cover — liveness probe
+            logger.exception("gemini.healthcheck_failed")
+            return False
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(_MAX_ATTEMPTS),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(_TransientGeminiError),
+)
+def _call_with_retry(
+    client: genai.Client,
+    *,
+    model: str,
+    contents: str,
+    config: genai_types.GenerateContentConfig,
+) -> str:
+    try:
+        response = client.models.generate_content(model=model, contents=contents, config=config)
+    except Exception as exc:
+        # All SDK exceptions are treated as transient — quotas, 5xx, timeouts.
+        logger.bind(error=type(exc).__name__).warning("gemini.call_failed_retrying")
+        raise _TransientGeminiError(str(exc)) from exc
+    text = getattr(response, "text", None)
+    if not text:
+        raise _TransientGeminiError("empty response")
+    return text
+
+
+__all__ = ["GeminiClient", "GeminiError"]

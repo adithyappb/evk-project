@@ -1,0 +1,52 @@
+{
+  "$schema": "https://firebase.google.com/docs/firestore/solutions/composite-indexes",
+  "_notes": [
+    "Deploy with: gcloud firestore indexes composite create --file=firestore.indexes.json",
+    "Each object describes a composite index on a single collection.",
+    "Single-field equality filters don't need composite indexes; these are for the compound queries."
+  ],
+  "indexes": [
+    {
+      "collectionGroup": "drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "drafts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "student_id", "order": "ASCENDING" },
+        { "fieldPath": "opportunity_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "opportunities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "deadline", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reminder_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "student_id", "order": "ASCENDING" },
+        { "fieldPath": "opportunity_id", "order": "ASCENDING" },
+        { "fieldPath": "days_before", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "student_matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "student_id", "order": "ASCENDING" },
+        { "fieldPath": "is_new", "order": "ASCENDING" },
+        { "fieldPath": "score", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

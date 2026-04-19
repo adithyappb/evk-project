@@ -1,0 +1,28 @@
+[
+  {
+    "id": "student_aanya",
+    "name": "Aanya Patel",
+    "email": "aanya.patel@example.edu",
+    "level": "undergrad",
+    "school": "Indian Institute of Technology, Bombay",
+    "graduation_year": 2027,
+    "fields_of_study": ["computer science", "artificial intelligence"],
+    "interests": ["ai", "open-source", "machine-learning", "hackathons", "women-in-stem"],
+    "location": "Mumbai, India",
+    "bio": "Third-year undergrad interested in ML systems, open-source contribution, and applied AI for social impact. Previously interned at a climate-tech startup.",
+    "opted_in": true
+  },
+  {
+    "id": "student_marcus",
+    "name": "Marcus Thompson",
+    "email": "marcus.thompson@example.edu",
+    "level": "high_school",
+    "school": "Lincoln High School",
+    "graduation_year": 2027,
+    "fields_of_study": ["physics", "robotics", "mechanical engineering"],
+    "interests": ["robotics", "space", "competitions", "science-fair", "entrepreneurship"],
+    "location": "Austin, Texas, USA",
+    "bio": "High school junior, captain of the FRC robotics team. Interested in aerospace engineering and building things that move. Looking for summer programs and competitions.",
+    "opted_in": true
+  }
+]
