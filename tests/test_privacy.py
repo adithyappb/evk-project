@@ -59,7 +59,7 @@ def test_age_band_derived_from_graduation_year():
 
     # High school, graduation 2026 → assumed age 18-1=17 → "17-18"
     ps = pseudonymise(
-        _make_student(level=StudentLevel.HIGH_SCHOOL, graduation_year=2026),
+        _make_student(level=StudentLevel.GRADE_12, graduation_year=2026),
         salt="t",
         now=datetime(2025, 1, 1, tzinfo=UTC),
     )
@@ -68,7 +68,7 @@ def test_age_band_derived_from_graduation_year():
 
 def test_age_band_fallback_without_graduation_year():
     ps = pseudonymise(
-        _make_student(level=StudentLevel.HIGH_SCHOOL, graduation_year=None),
+        _make_student(level=StudentLevel.GRADE_12, graduation_year=None),
         salt="t",
     )
     assert ps.age_band == "14-16"

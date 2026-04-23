@@ -144,7 +144,7 @@ def healthz() -> dict[str, object]:
 def _probe(label: str, check) -> tuple[str, dict[str, object], bool]:
     try:
         result = check()
-        ok = True if result is None else bool(result)
+        ok = result is not False
         return label, {"ok": ok}, ok
     except Exception as exc:
         return label, {"ok": False, "error": str(exc)[:200]}, False

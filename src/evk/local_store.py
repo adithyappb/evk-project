@@ -21,20 +21,26 @@ from typing import Any, Generic, TypeVar
 from evk.config import get_settings
 from evk.firestore_repo import (
     DraftRepo,
+    LoginChallengeRepo,
     OpportunityRepo,
     RawEmailRepo,
     ReminderRepo,
     Repos,
+    SessionRepo,
     StudentRepo,
+    UserRepo,
 )
 from evk.models import (
+    AppUser,
     DraftMessage,
     DraftStatus,
     FirestoreDoc,
+    LoginChallenge,
     Opportunity,
     RawEmail,
     RawEmailStatus,
     ReminderLog,
+    Session,
     Student,
 )
 
@@ -206,6 +212,13 @@ class LocalStudentRepo(_LocalRepoBase[Student], StudentRepo):
     def list_opted_in(self) -> list[Student]:
         return [s for s in self._col.list_all() if s.opted_in]
 
+    def get_by_email(self, email: str) -> Student | None:
+        email_norm = email.strip().lower()
+        for student in self._col.list_all():
+            if student.email.lower() == email_norm:
+                return student
+        return None
+
 
 class LocalOpportunityRepo(_LocalRepoBase[Opportunity], OpportunityRepo):
     def __init__(self, path: Path) -> None:
@@ -275,6 +288,33 @@ class LocalReminderRepo(_LocalRepoBase[ReminderLog], ReminderRepo):
         )
 
 
+class LocalUserRepo(_LocalRepoBase[AppUser], UserRepo):
+    def __init__(self, path: Path) -> None:
+        self._col = _JsonCollection(path, AppUser)
+
+    def get_by_email(self, email: str) -> AppUser | None:
+        email_norm = email.strip().lower()
+        for user in self._col.list_all():
+            if user.email.lower() == email_norm:
+                return user
+        return None
+
+
+class LocalLoginChallengeRepo(_LocalRepoBase[LoginChallenge], LoginChallengeRepo):
+    def __init__(self, path: Path) -> None:
+        self._col = _JsonCollection(path, LoginChallenge)
+
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[LoginChallenge]:
+        items = [challenge for challenge in self._col.list_all() if challenge.user_id == user_id]
+        items.sort(key=lambda challenge: challenge.created_at, reverse=True)
+        return items[:limit]
+
+
+class LocalSessionRepo(_LocalRepoBase[Session], SessionRepo):
+    def __init__(self, path: Path) -> None:
+        self._col = _JsonCollection(path, Session)
+
+
 # --------------------------------------------------------------------------- #
 # Factory                                                                     #
 # --------------------------------------------------------------------------- #
@@ -290,6 +330,9 @@ def build_local_repos(data_dir: Path | None = None) -> Repos:
         raw_emails=LocalRawEmailRepo(root / "raw_emails.json"),
         drafts=LocalDraftRepo(root / "drafts.json"),
         reminders=LocalReminderRepo(root / "reminders.json"),
+        users=LocalUserRepo(root / "users.json"),
+        login_challenges=LocalLoginChallengeRepo(root / "login_challenges.json"),
+        sessions=LocalSessionRepo(root / "sessions.json"),
     )
 
 

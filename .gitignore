@@ -21,7 +21,9 @@ build/
 .vscode/
 
 # --- Secrets & local state (NEVER commit) ---
-# Block every env file variant, then whitelist the shareable example.
+# Block every local env file variant, then whitelist the shareable example.
+# `.env.example` is the committed template; `.env` must stay local.
+# `credentials.txt` is the temporary development-only reference file checked into the repo.
 .env
 .env.*
 !.env.example

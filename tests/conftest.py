@@ -87,7 +87,7 @@ def student_highschool() -> Student:
         id="student_max",
         name="Max Smith",
         email="max@example.edu",
-        level=StudentLevel.HIGH_SCHOOL,
+        level=StudentLevel.GRADE_12,
         school="Lincoln HS",
         fields_of_study=["physics", "robotics"],
         interests=["robotics", "space", "competitions"],
@@ -129,7 +129,7 @@ def opp_highschool_sciencefair() -> Opportunity:
         location="Columbus, OH",
         tags=["science-fair", "competitions", "research"],
         fields_of_study=["physics", "biology", "engineering"],
-        min_level=StudentLevel.HIGH_SCHOOL,
+        min_level=StudentLevel.GRADE_12,
     )
 
 

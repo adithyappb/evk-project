@@ -47,7 +47,12 @@ uv run evk seed               # loads 2 students + 10 opportunities into ./data
 uv run evk serve              # http://localhost:8080
 ```
 
-Open `http://localhost:8080`, click **Simulate newsletter** → a draft appears → click **Approve** → the send is logged to `data/sent.jsonl`.
+Open [http://localhost:8080](http://localhost:8080), then use:
+
+- [http://localhost:8080/login](http://localhost:8080/login) for existing users
+- [http://localhost:8080/register](http://localhost:8080/register) for new users
+
+Local development credentials live in `credentials.txt`. These are for development only. In local mode, verification codes print in the server terminal. In production, switch to SMTP-backed delivery for real verification emails.
 
 ### 4. Verify
 
@@ -55,7 +60,7 @@ Open `http://localhost:8080`, click **Simulate newsletter** → a draft appears 
 uv run evk info                                  # show wiring
 curl http://localhost:8080/healthz               # liveness  (cheap)
 curl http://localhost:8080/health                # readiness (exercises repos + inkbox + gemini)
-uv run pytest -q                                 # 160 tests
+uv run pytest -q                                 # full test suite
 ```
 
 `evk info` should print:
@@ -84,7 +89,9 @@ uv run pytest -q                                 # 160 tests
 | `.env`            | **No** (gitignored) | Your local, developer-specific overrides        |
 | `secrets/`        | **No** (gitignored) | Service-account JSON, signing keys, PEMs        |
 
-`.gitignore` blocks every `.env*` file (except the template), `secrets/`, `*.pem`, `*.key`, and any `service-account*.json`. **Never commit a real credential; if one leaks, rotate it immediately.**
+`.gitignore` blocks every local `.env*` file (except the template), `secrets/`, `*.pem`, `*.key`, and any `service-account*.json`. **Never commit a real credential; if one leaks, rotate it immediately.**
+
+For local setup, copy `.env.example` to `.env` and edit only `.env`. The example file stays committed as the shared template; `.env` stays ignored.
 
 For production, the recommended layout is:
 
@@ -175,6 +182,8 @@ google_evk_project/
         └── reminder.py          # deadline reminder sweep
 ```
 
+`credentials.txt` in the repo root contains the temporary local development accounts.
+
 ---
 
 ## CLI
@@ -194,12 +203,47 @@ google_evk_project/
 
 ---
 
-## Admin dashboard
+## Development workflow
 
-`GET /` serves a responsive dark-mode dashboard:
+Clone the repository, switch to `dev`, and branch from there:
+
+```bash
+git clone <repo-url> google_evk_project
+cd google_evk_project
+git checkout dev
+git pull origin dev
+git checkout -b codex/your-change-name
+```
+
+Set up local configuration, make your changes, and verify before committing:
+
+```bash
+uv sync
+copy .env.example .env     # Windows PowerShell / cmd
+# cp .env.example .env     # macOS / Linux
+
+uv run pytest -q
+uv run ruff check src tests
+```
+
+Commit your work with a focused message:
+
+```bash
+git add .
+git commit -m "Refine auth flow and local setup"
+```
+
+Use `credentials.txt` only during local development. For production, update `.env` to use your real SMTP provider and set `AUTH_EMAIL_DELIVERY_MODE=smtp` so verification codes are delivered through email instead of the terminal.
+
+---
+
+## Web app
+
+`GET /` serves the EVKids role-aware web app:
 
 - Live counters (pending, sent today, opportunities, students) refresh every 5s
-- One-click **Simulate newsletter**, **Poll Inkbox**, **Run reminders**, **Build digest**
+- Dedicated `/login` and `/register` entry pages for auth
+- Admin tools for polling, reminders, and digest generation
 - Tabbed drafts (pending / approved / sent / rejected / failed)
 - Per-draft Approve (sends) / Reject (archives)
 
@@ -276,7 +320,7 @@ If you'd rather poll than webhook: `uv run evk scheduler --poll-minutes 5 --remi
 uv sync --all-groups
 uv run ruff check src tests
 uv run ruff format src tests
-uv run pytest               # 160 tests — unit, integration, UI, stress, health/auth
+  uv run pytest               # full test suite — unit, integration, UI, stress, health/auth
 ```
 
 Test layout:

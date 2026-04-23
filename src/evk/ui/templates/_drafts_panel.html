@@ -1,0 +1,56 @@
+<section id="drafts" class="mt-10 scroll-mt-24">
+  <div class="mb-4 flex flex-wrap items-baseline justify-between gap-4">
+    <div>
+      <h2 class="text-lg font-semibold tracking-tight text-slate-950">Drafts</h2>
+      <p class="mt-0.5 text-xs text-slate-500">Review what is ready, what was sent, and what still needs attention.</p>
+    </div>
+    <div class="flex gap-1 rounded-2xl border border-slate-200 bg-slate-100/80 p-1" role="tablist" aria-label="Draft status">
+      {% for label, value in status_tabs %}
+      {% set count = status_counts.get(value, 0) %}
+      <button
+        type="button"
+        role="tab"
+        data-draft-tab="{{ value }}"
+        aria-selected="{{ 'true' if value == active_status else 'false' }}"
+        class="draft-tab inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium transition {% if value == active_status %}bg-white text-brand-700 shadow shadow-slate-200/50 ring-1 ring-slate-200{% else %}text-slate-500 hover:bg-white/50 hover:text-slate-700{% endif %}"
+        hx-get="/ui/drafts?status_filter={{ value }}"
+        hx-target="#drafts"
+        hx-swap="outerHTML"
+      >
+        {{ label }}
+        {% if count %}
+        <span class="draft-tab-count rounded-md px-1.5 text-[10px] tabular-nums {% if value == active_status %}bg-brand-100 text-brand-700{% else %}bg-slate-200 text-slate-600{% endif %}">{{ count }}</span>
+        {% endif %}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div id="drafts-list">
+    <div class="mb-4">
+      <label class="block">
+        <span class="sr-only">Search drafts</span>
+        <input
+          type="text"
+          id="draft-search"
+          placeholder="Search by subject, recipient, or content..."
+          class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-4 focus:ring-brand-100"
+          oninput="filterDrafts()"
+        />
+      </label>
+    </div>
+    <div class="mb-4">
+      <label class="block">
+        <span class="sr-only">Search drafts</span>
+        <input
+          type="text"
+          id="draft-search"
+          placeholder="Search by subject, recipient, or content..."
+          class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-4 focus:ring-brand-100"
+          oninput="filterDrafts()"
+        />
+      </label>
+    </div>
+    {% include "_drafts.html" %}
+  </div>
+</section>

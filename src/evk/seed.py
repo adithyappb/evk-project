@@ -33,8 +33,11 @@ def _coerce_opportunity(entry: dict) -> Opportunity:
     deadline_raw = entry.get("deadline")
     deadline: datetime | None = None
     if deadline_raw:
-        d = date.fromisoformat(deadline_raw)
-        deadline = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+        if "T" in deadline_raw:
+            deadline = datetime.fromisoformat(deadline_raw.replace("Z", "+00:00")).astimezone(UTC)
+        else:
+            d = date.fromisoformat(deadline_raw)
+            deadline = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
     doc_id = OpportunityRepo.stable_id(
         title=entry["title"],
         deadline_iso=deadline_raw,

@@ -13,6 +13,8 @@ Commands:
 
 from __future__ import annotations
 
+import errno
+import socket
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -54,6 +56,62 @@ def info() -> None:
     console.print(table)
 
 
+def _port_is_available(host: str, port: int) -> bool:
+    """Return whether a host/port pair can be bound for the dev server."""
+    last_exc: OSError | None = None
+    try:
+        addrinfos = socket.getaddrinfo(
+            host,
+            port,
+            type=socket.SOCK_STREAM,
+            flags=socket.AI_PASSIVE,
+        )
+    except OSError as exc:
+        raise typer.BadParameter(f"Could not resolve bind address {host}:{port}: {exc}") from exc
+
+    saw_in_use = False
+    for family, socktype, proto, _, sockaddr in addrinfos:
+        try:
+            with socket.socket(family, socktype, proto) as sock:
+                sock.bind(sockaddr)
+            return True
+        except OSError as exc:
+            last_exc = exc
+            if exc.errno in {errno.EADDRINUSE, 10048}:
+                saw_in_use = True
+                continue
+            raise typer.BadParameter(f"Could not bind to {host}:{port}: {exc}") from exc
+
+    if saw_in_use:
+        return False
+
+    if last_exc is not None:
+        raise typer.BadParameter(f"Could not bind to {host}:{port}: {last_exc}") from last_exc
+
+    return False
+
+
+def _resolve_bind_port(host: str, requested_port: int, *, allow_fallback: bool) -> int:
+    """Pick a bind port, falling forward when the default dev port is occupied."""
+    if _port_is_available(host, requested_port):
+        return requested_port
+
+    if not allow_fallback:
+        raise typer.BadParameter(
+            f"Port {requested_port} is already in use on {host}. "
+            f"Stop the other server or run `evk serve --port {requested_port + 1}`."
+        )
+
+    for candidate in range(requested_port + 1, requested_port + 11):
+        if _port_is_available(host, candidate):
+            return candidate
+
+    raise typer.BadParameter(
+        f"Port {requested_port} is already in use on {host}, and no free port "
+        f"was found from {requested_port + 1} to {requested_port + 10}."
+    )
+
+
 # --------------------------------------------------------------------------- #
 # serve                                                                       #
 # --------------------------------------------------------------------------- #
@@ -68,12 +126,16 @@ def serve(
     """Run the FastAPI server (webhooks + admin REST + dashboard UI)."""
     settings = get_settings()
     bind_host = host or settings.app_host
-    bind_port = port or settings.app_port
+    requested_port = port or settings.app_port
+    bind_port = _resolve_bind_port(bind_host, requested_port, allow_fallback=port is None)
     public_host = "localhost" if bind_host in {"0.0.0.0", "::"} else bind_host
     # Loguru intercepts stdlib logging, which hides uvicorn's "running on" line.
     # Print an ASCII-only banner up front — stays readable even on cp1252 pipes.
     bar = "=" * 60
     print(flush=True)
+    if bind_port != requested_port:
+        print(f"  Port {requested_port} is busy; serving on {bind_port} instead.", flush=True)
+        print(flush=True)
     print(bar, flush=True)
     print(f"  EVK serving  |  {describe_wiring().get('mode', 'local')} mode", flush=True)
     print(f"  Dashboard   http://{public_host}:{bind_port}/", flush=True)

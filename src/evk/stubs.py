@@ -68,22 +68,32 @@ _KIND_KEYWORDS: dict[OpportunityKind, tuple[str, ...]] = {
 }
 
 _LEVEL_KEYWORDS: dict[StudentLevel, tuple[str, ...]] = {
-    StudentLevel.HIGH_SCHOOL: (
+    StudentLevel.GRADE_11: (
+        "grade 11",
+        "11th grade",
+    ),
+    StudentLevel.GRADE_12: (
+        "grade 12",
+        "12th grade",
         "high school",
         "high-school",
-        "grade 9",
-        "grade 10",
-        "grade 11",
-        "grade 12",
     ),
-    StudentLevel.UNDERGRAD: (
+    StudentLevel.COLLEGE: (
+        "college",
         "undergrad",
         "undergraduate",
         "bachelor",
         "university student",
-        "college",
     ),
-    StudentLevel.GRAD: ("graduate", "postgraduate", "phd", "master", "postdoc"),
+    StudentLevel.ALUMNI: (
+        "alumni",
+        "graduate",
+        "postgraduate",
+        "phd",
+        "master",
+        "postdoc",
+    ),
+    StudentLevel.OTHER: (),
 }
 
 _FIELD_KEYWORDS: tuple[str, ...] = (

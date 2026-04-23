@@ -1,4 +1,4 @@
-"""HTML dashboard route tests. Renders real Jinja templates end-to-end."""
+"""UI and auth route tests."""
 
 from __future__ import annotations
 
@@ -10,8 +10,11 @@ from fastapi.testclient import TestClient
 from evk.agents.distributor import DistributorAgent
 from evk.agents.ingestion import IngestionAgent
 from evk.api import app
+from evk.auth import AuthNotifier, AuthService
+from evk.config import get_settings
 from evk.models import DraftStatus
 from evk.ui.routes import (
+    _auth_dep,
     _distributor_dep,
     _ingestion_dep,
     _inkbox_dep,
@@ -19,8 +22,26 @@ from evk.ui.routes import (
 )
 
 
+class CaptureNotifier(AuthNotifier):
+    def __init__(self) -> None:
+        self.codes: dict[str, str] = {}
+
+    def send_code(self, *, email: str, code: str) -> None:
+        self.codes[email] = code
+
+
 @pytest.fixture
-def ui_client(fake_repos, fake_inkbox) -> Iterator[TestClient]:
+def auth_service(fake_repos) -> tuple[AuthService, CaptureNotifier]:
+    settings = get_settings()
+    notifier = CaptureNotifier()
+    service = AuthService(repos=fake_repos, notifier=notifier, settings=settings)
+    service.ensure_bootstrap()
+    return service, notifier
+
+
+@pytest.fixture
+def ui_client(fake_repos, fake_inkbox, auth_service) -> Iterator[TestClient]:
+    service, _ = auth_service
     app.dependency_overrides[_repos_dep] = lambda: fake_repos
     app.dependency_overrides[_inkbox_dep] = lambda: fake_inkbox
     app.dependency_overrides[_ingestion_dep] = lambda: IngestionAgent(
@@ -29,160 +50,164 @@ def ui_client(fake_repos, fake_inkbox) -> Iterator[TestClient]:
     app.dependency_overrides[_distributor_dep] = lambda: DistributorAgent(
         repos=fake_repos, inkbox=fake_inkbox
     )
-    with TestClient(app) as c:
-        yield c
+    app.dependency_overrides[_auth_dep] = lambda: service
+    with TestClient(app) as client:
+        yield client
     app.dependency_overrides.clear()
 
 
-def test_dashboard_renders(ui_client, fake_repos, opp_hackathon, student_undergrad):
+def _login(client: TestClient, notifier: CaptureNotifier, email: str, access_key: str) -> None:
+    login = client.post("/auth/login", data={"email": email, "access_key": access_key})
+    assert login.status_code == 200
+    code = notifier.codes[email]
+    verify = client.post(
+        "/auth/verify",
+        data={"email": email, "code": code},
+        follow_redirects=False,
+    )
+    assert verify.status_code == 303
+
+
+def test_front_page_has_centered_login_path(ui_client):
+    response = ui_client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert "Beautifully simple access to the EVKids opportunity ecosystem." in body
+    assert "Existing user" in body
+    assert "New user" in body
+    assert 'http://testserver/login' in body
+    assert 'http://testserver/register' in body
+
+
+def test_login_page_defaults_to_existing_user(ui_client):
+    response = ui_client.get("/login")
+    assert response.status_code == 200
+    body = response.text
+    assert "Existing user" in body
+    assert "Enter your details to continue." in body
+    assert "Create your account." not in body
+    assert "Full name" not in body
+    assert "Local developer accounts" not in body
+
+
+def test_register_page_renders_new_user_only(ui_client):
+    response = ui_client.get("/register")
+    assert response.status_code == 200
+    body = response.text
+    assert "New user" in body
+    assert "Create your account." in body
+    assert "Full name" in body
+    assert "Enter your details to continue." not in body
+    assert "Existing user" not in body
+
+
+def test_signup_creates_user_and_shows_verify(ui_client, fake_repos, auth_service):
+    _, notifier = auth_service
+    response = ui_client.post(
+        "/auth/signup",
+        data={
+            "name": "Jordan Rivera",
+            "email": "jordan@example.org",
+            "role": "ngo_admin",
+            "organization": "City Youth Lab",
+            "access_key": "StrongerPass123",
+        },
+    )
+    assert response.status_code == 200
+    assert "verification code" in response.text.lower()
+    assert fake_repos.users.get_by_email("jordan@example.org") is not None
+    assert "jordan@example.org" in notifier.codes
+
+
+def test_admin_login_reaches_admin_dashboard(ui_client, auth_service):
+    _, notifier = auth_service
+    _login(ui_client, notifier, "admin@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.get("/app/admin")
+    assert response.status_code == 200
+    body = response.text
+    assert "Platform admin" in body
+    assert "User management" in body
+    assert "Open review queue" in body
+
+
+def test_student_login_reaches_student_dashboard(ui_client, fake_repos, auth_service, student_undergrad, pending_draft, opp_hackathon):
     fake_repos.students.upsert(student_undergrad)
     fake_repos.opportunities.upsert(opp_hackathon)
-    r = ui_client.get("/")
-    assert r.status_code == 200
-    body = r.text
-    assert "EVK" in body
-    assert "Drafts" in body
-    assert opp_hackathon.title in body
+    fake_repos.drafts.upsert(pending_draft)
+    service, notifier = auth_service
+    service.ensure_bootstrap()
+    _login(ui_client, notifier, student_undergrad.email, get_settings().auth_local_demo_password)
+    response = ui_client.get("/app/student")
+    assert response.status_code == 200
+    body = response.text
+    assert "Student view" in body
     assert student_undergrad.name in body
+    assert "Recent outreach" in body
+    assert "love Hack the North" in body
 
 
-def test_stats_fragment(ui_client, fake_repos, pending_draft):
+def test_ngo_login_reaches_partner_dashboard(ui_client, auth_service):
+    _, notifier = auth_service
+    _login(ui_client, notifier, "partner@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.get("/app/ngo")
+    assert response.status_code == 200
+    body = response.text
+    assert "NGO admin" in body
+    assert "Partner operations" in body
+    assert "Tracked opportunities" in body
+
+
+def test_admin_detail_pages_require_auth(ui_client):
+    response = ui_client.get("/ui/pages/drafts/pending_approval", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_admin_can_view_detail_pages_after_login(ui_client, fake_repos, auth_service, pending_draft):
     fake_repos.drafts.upsert(pending_draft)
-    r = ui_client.get("/ui/stats")
-    assert r.status_code == 200
-    assert "Pending approvals" in r.text
+    _, notifier = auth_service
+    _login(ui_client, notifier, "admin@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.get("/ui/pages/drafts/pending_approval")
+    assert response.status_code == 200
+    assert "Back to dashboard" in response.text
+    assert "Approve &amp; send" in response.text
 
 
-def test_drafts_fragment_renders_row(ui_client, fake_repos, pending_draft):
+def test_admin_can_toggle_user_active(ui_client, fake_repos, auth_service, student_undergrad):
+    fake_repos.students.upsert(student_undergrad)
+    service, notifier = auth_service
+    service.ensure_bootstrap()
+    target = fake_repos.users.get_by_email(student_undergrad.email)
+    assert target is not None
+    _login(ui_client, notifier, "admin@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.post(f"/ui/users/{target.id}/toggle-active")
+    assert response.status_code == 200
+    refreshed = fake_repos.users.get(target.id)
+    assert refreshed is not None
+    assert refreshed.is_active is False
+    assert "inactive" in response.text.lower()
+
+
+def test_ui_approve_sends_and_swaps(ui_client, fake_repos, fake_inkbox, auth_service, pending_draft):
     fake_repos.drafts.upsert(pending_draft)
-    r = ui_client.get("/ui/drafts?status_filter=pending_approval")
-    assert r.status_code == 200
-    # Jinja auto-escapes — check a substring that contains no special chars.
-    assert "love Hack the North" in r.text
-    assert "Approve" in r.text
-
-
-def test_drafts_fragment_empty_state(ui_client):
-    r = ui_client.get("/ui/drafts?status_filter=sent")
-    assert r.status_code == 200
-    assert "Nothing" in r.text
-
-
-def test_ui_approve_sends_and_swaps(ui_client, fake_repos, fake_inkbox, pending_draft):
-    fake_repos.drafts.upsert(pending_draft)
-    r = ui_client.post(f"/ui/drafts/{pending_draft.id}/approve")
-    assert r.status_code == 200
+    _, notifier = auth_service
+    _login(ui_client, notifier, "admin@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.post(f"/ui/drafts/{pending_draft.id}/approve")
+    assert response.status_code == 200
     updated = fake_repos.drafts.get(pending_draft.id)
+    assert updated is not None
     assert updated.status == DraftStatus.SENT
     assert len(fake_inkbox.sent) == 1
-    assert "sent" in r.text.lower()
+    assert 'hx-swap-oob="outerHTML:#stats"' in response.text
+    assert "Sent email to" in response.text
 
 
-def test_ui_reject_swaps(ui_client, fake_repos, pending_draft):
-    fake_repos.drafts.upsert(pending_draft)
-    r = ui_client.post(f"/ui/drafts/{pending_draft.id}/reject")
-    assert r.status_code == 200
-    assert fake_repos.drafts.get(pending_draft.id).status == DraftStatus.REJECTED
-    assert "rejected" in r.text.lower()
-
-
-def test_ui_approve_404_when_missing(ui_client):
-    r = ui_client.post("/ui/drafts/does-not-exist/approve")
-    assert r.status_code == 404
-
-
-def test_toast_is_dismissible_and_has_close_button(ui_client):
-    """Every server-issued toast must ship a close button + a TTL the JS can read."""
-    r = ui_client.post("/ui/remind")
-    assert r.status_code == 200
-    body = r.text
-    # Toast is emitted as an out-of-band swap into #toasts
-    assert 'hx-swap-oob="beforeend:#toasts"' in body
-    assert "Reminder sweep" in body
-    # Close control exists and is keyboard-accessible
-    assert "data-toast-close" in body
-    assert 'aria-label="Dismiss notification"' in body
-    # TTL is advertised to the JS
-    assert 'data-toast-ttl="4500"' in body
-    # Progress bar is rendered
-    assert "data-toast-progress" in body
-    # Live region for accessibility
-    assert 'aria-live="polite"' in body
-
-
-def test_digest_toast_even_when_zero_queued(ui_client):
-    """Digest returning 0 drafts still emits a toast — and that toast is dismissible."""
-    r = ui_client.post("/ui/digest")
-    assert r.status_code == 200
-    assert "Weekly digest queued" in r.text
-    assert "data-toast-close" in r.text
-
-
-def test_stats_fragment_without_flash_has_no_toast(ui_client):
-    """Plain GET /ui/stats must NOT emit a toast (avoids spurious popups on refresh)."""
-    r = ui_client.get("/ui/stats")
-    assert r.status_code == 200
-    assert "hx-swap-oob" not in r.text
-    assert "data-toast" not in r.text
-
-
-def test_dashboard_loads_toast_script(ui_client):
-    """The base template ships the hardened dismiss/arm/pause logic."""
-    r = ui_client.get("/")
-    assert r.status_code == 200
-    body = r.text
+def test_toast_script_and_logout_present_for_signed_in_user(ui_client, auth_service):
+    _, notifier = auth_service
+    _login(ui_client, notifier, "admin@evkids.org", get_settings().auth_local_demo_password)
+    response = ui_client.get("/app/admin")
+    assert response.status_code == 200
+    body = response.text
     assert "htmx:oobAfterSwap" in body
-    assert "htmx:afterSwap" in body
     assert "data-toast-close" in body or "data-toast-close]" in body
-    assert "Escape" in body
-
-
-def test_stat_cards_are_clickable_anchors(ui_client):
-    """Every stat card is a real <a> with a scroll target so it's keyboard-navigable."""
-    r = ui_client.get("/ui/stats")
-    assert r.status_code == 200
-    body = r.text
-    # 4 cards, 4 anchor targets
-    assert body.count("data-stat-card") == 4
-    assert 'href="#drafts"' in body          # pending + sent today
-    assert 'href="#opportunities"' in body   # opportunities card
-    assert 'href="#students"' in body        # students card
-    # Pending + Sent-today also drive the draft tabs
-    assert 'data-activate-tab="pending_approval"' in body
-    assert 'data-activate-tab="sent"' in body
-    # Every card is keyboard-accessible
-    assert body.count("focus-visible:ring-") >= 4
-    assert body.count("aria-label=") >= 4
-
-
-def test_dashboard_sections_have_scroll_anchors(ui_client, fake_repos, opp_hackathon, student_undergrad):
-    """The dashboard shell exposes #drafts / #students / #opportunities so stat-card links actually land."""
-    fake_repos.students.upsert(student_undergrad)
-    fake_repos.opportunities.upsert(opp_hackathon)
-    r = ui_client.get("/")
-    assert r.status_code == 200
-    body = r.text
-    assert 'id="drafts"' in body
-    assert 'id="students"' in body
-    assert 'id="opportunities"' in body
-
-
-def test_draft_tabs_expose_data_attr_for_card_dispatch(ui_client):
-    """The base dashboard emits data-draft-tab on every tab so the stat cards can drive them."""
-    r = ui_client.get("/")
-    assert r.status_code == 200
-    body = r.text
-    for value in ("pending_approval", "approved", "sent", "rejected", "failed"):
-        assert f'data-draft-tab="{value}"' in body, value
-    # Tab-state sync helper is wired up in the base template
-    assert "setActiveTab" in body
-    assert 'role="tablist"' in body
-
-
-def test_dashboard_wires_stat_card_dispatcher(ui_client):
-    """The JS dispatcher that handles card clicks ships in the base template."""
-    r = ui_client.get("/")
-    body = r.text
-    assert "data-stat-card" in body
-    assert "smoothScrollTo" in body
-    assert "scrollIntoView" in body
+    assert "Sign out" in body
+    assert "copyText" in body

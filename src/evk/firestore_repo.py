@@ -19,13 +19,16 @@ from google.cloud.firestore_v1 import FieldFilter
 from evk.config import get_settings
 from evk.logging import logger
 from evk.models import (
+    AppUser,
     DraftMessage,
     DraftStatus,
     FirestoreDoc,
+    LoginChallenge,
     Opportunity,
     RawEmail,
     RawEmailStatus,
     ReminderLog,
+    Session,
     Student,
 )
 
@@ -153,6 +156,13 @@ class StudentRepo(_Repo[Student]):
         q = self.collection.where(filter=FieldFilter("opted_in", "==", True))
         return [self._load(s.id, s.to_dict() or {}) for s in q.stream()]
 
+    def get_by_email(self, email: str) -> Student | None:
+        q = self.collection.where(filter=FieldFilter("email", "==", email)).limit(1)
+        snap = next(iter(q.stream()), None)
+        if snap is None:
+            return None
+        return self._load(snap.id, snap.to_dict() or {})
+
 
 class OpportunityRepo(_Repo[Opportunity]):
     collection_name = "opportunities"
@@ -246,6 +256,36 @@ class ReminderRepo(_Repo[ReminderLog]):
         return next(iter(q.stream()), None) is not None
 
 
+class UserRepo(_Repo[AppUser]):
+    collection_name = "users"
+    model = AppUser
+
+    def get_by_email(self, email: str) -> AppUser | None:
+        q = self.collection.where(filter=FieldFilter("email", "==", email)).limit(1)
+        snap = next(iter(q.stream()), None)
+        if snap is None:
+            return None
+        return self._load(snap.id, snap.to_dict() or {})
+
+
+class LoginChallengeRepo(_Repo[LoginChallenge]):
+    collection_name = "login_challenges"
+    model = LoginChallenge
+
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[LoginChallenge]:
+        q = (
+            self.collection.where(filter=FieldFilter("user_id", "==", user_id))
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        return [self._load(s.id, s.to_dict() or {}) for s in q.stream()]
+
+
+class SessionRepo(_Repo[Session]):
+    collection_name = "sessions"
+    model = Session
+
+
 # --------------------------------------------------------------------------- #
 # Convenience factory                                                         #
 # --------------------------------------------------------------------------- #
@@ -264,6 +304,9 @@ class Repos:
     raw_emails: RawEmailRepo
     drafts: DraftRepo
     reminders: ReminderRepo
+    users: UserRepo
+    login_challenges: LoginChallengeRepo
+    sessions: SessionRepo
 
 
 @lru_cache(maxsize=1)
@@ -275,4 +318,7 @@ def get_repos() -> Repos:
         raw_emails=RawEmailRepo(client),
         drafts=DraftRepo(client),
         reminders=ReminderRepo(client),
+        users=UserRepo(client),
+        login_challenges=LoginChallengeRepo(client),
+        sessions=SessionRepo(client),
     )

@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     admin_base_url: str = "http://localhost:8080"
     admin_email: str = "admin@example.com"
     reminder_days_before_raw: str = Field(default="7,2", alias="reminder_days_before")
+    session_cookie_name: str = "evk_session"
+    session_ttl_hours: int = 12
+    login_code_ttl_minutes: int = 10
+    auth_local_demo_password: str = "ChangeMe123!"
+    auth_smtp_host: str = "localhost"
+    auth_smtp_port: int = 1025
+    auth_smtp_username: str = ""
+    auth_smtp_password: str = ""
+    auth_smtp_sender: str = "login@evkids.local"
+    auth_email_delivery_mode: Literal["terminal", "smtp"] = "terminal"
 
     # ---- Admin auth (optional bearer token; if empty, no auth enforced) ----
     admin_api_token: str | None = None

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin Agents · EVkids{% endblock %}
+{% block content %}
+
+<h1 class="text-2xl font-bold text-slate-900 mb-6">Backend Agents Dashboard</h1>
+
+{# Action toolbar #}
+<section id="stats" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-4">
+  <div class="mb-4">
+      <h2 class="text-sm font-semibold text-slate-800">Trigger Actions manually</h2>
+      <p class="text-xs text-slate-500">Demo environment admin controls.</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+  {% set actions = [
+    ("simulate", "/ui/simulate", "Simulate newsletter", "Feed seed/sample_newsletter.txt through the pipeline", "S",
+     '<path d="M3 12l4-4 4 4 4-8 6 14"/>'),
+    ("poll",     "/ui/poll",     "Poll Inbox",         "Pull unread inbound messages",                     "P",
+     '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>'),
+    ("remind",   "/ui/remind",   "Run reminders",       "Send reminders to students with upcoming deadlines", "R",
+     '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
+    ("digest",   "/ui/digest",   "Weekly digest",        "Queue one draft per student with their top-5 matches", "D",
+     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>'),
+  ] %}
+  {% for key, href, label, sub, hotkey, icon in actions %}
+  <button
+    type="button"
+    data-shortcut="{{ key }}"
+    class="group flex-1 min-w-[240px] flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:bg-white hover:border-brand-300 transition shadow-sm"
+    hx-post="{{ href }}" hx-target="#stats" hx-swap="outerHTML" hx-indicator="#spin-{{ key }}"
+  >
+    <div class="h-9 w-9 rounded-lg bg-white border border-slate-200 grid place-items-center text-brand-600 transition">
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{{ icon|safe }}</svg>
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="text-sm font-medium text-slate-800">{{ label }}</div>
+      <div class="text-xs text-slate-500 truncate">{{ sub }}</div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <svg id="spin-{{ key }}" class="htmx-indicator h-4 w-4 text-brand-500 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+      <kbd class="hidden sm:inline-flex items-center justify-center h-5 w-5 text-[10px] text-slate-500 bg-slate-100 border border-slate-200 rounded">{{ hotkey }}</kbd>
+    </div>
+  </button>
+  {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

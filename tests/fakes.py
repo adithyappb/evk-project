@@ -13,16 +13,21 @@ from typing import Any
 
 from evk.firestore_repo import (
     DraftRepo,
+    LoginChallengeRepo,
     OpportunityRepo,
     RawEmailRepo,
     ReminderRepo,
     Repos,
+    SessionRepo,
     StudentRepo,
+    UserRepo,
 )
 from evk.inkbox_client import InboundMessage, InkboxClient
 from evk.models import (
+    AppUser,
     DraftMessage,
     DraftStatus,
+    LoginChallenge,
     Opportunity,
     RawEmailStatus,
     Student,
@@ -87,6 +92,13 @@ class FakeStudentRepo(_FakeRepoMixin, StudentRepo):
     def list_opted_in(self) -> list[Student]:
         return [s for s in self.list_all() if s.opted_in]
 
+    def get_by_email(self, email: str) -> Student | None:
+        email_norm = email.strip().lower()
+        for student in self._docs.values():
+            if student.email.lower() == email_norm:
+                return self._clone(student)
+        return None
+
 
 class FakeOpportunityRepo(_FakeRepoMixin, OpportunityRepo):
     def with_upcoming_deadlines(self, *, within_days: int) -> list[Opportunity]:
@@ -144,6 +156,26 @@ class FakeReminderRepo(_FakeRepoMixin, ReminderRepo):
         )
 
 
+class FakeUserRepo(_FakeRepoMixin, UserRepo):
+    def get_by_email(self, email: str) -> AppUser | None:
+        email_norm = email.strip().lower()
+        for user in self._docs.values():
+            if user.email.lower() == email_norm:
+                return self._clone(user)
+        return None
+
+
+class FakeLoginChallengeRepo(_FakeRepoMixin, LoginChallengeRepo):
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[LoginChallenge]:
+        items = [challenge for challenge in self.list_all() if challenge.user_id == user_id]
+        items.sort(key=lambda challenge: challenge.created_at, reverse=True)
+        return items[:limit]
+
+
+class FakeSessionRepo(_FakeRepoMixin, SessionRepo):
+    pass
+
+
 def build_fake_repos() -> Repos:
     return Repos(
         students=FakeStudentRepo(),
@@ -151,6 +183,9 @@ def build_fake_repos() -> Repos:
         raw_emails=FakeRawEmailRepo(),
         drafts=FakeDraftRepo(),
         reminders=FakeReminderRepo(),
+        users=FakeUserRepo(),
+        login_challenges=FakeLoginChallengeRepo(),
+        sessions=FakeSessionRepo(),
     )
 
 

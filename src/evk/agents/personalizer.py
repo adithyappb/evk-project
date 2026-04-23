@@ -28,9 +28,11 @@ from evk.privacy import pseudonymise
 DEFAULT_MATCH_THRESHOLD = 0.45
 
 _LEVEL_RANK = {
-    StudentLevel.HIGH_SCHOOL: 0,
-    StudentLevel.UNDERGRAD: 1,
-    StudentLevel.GRAD: 2,
+    StudentLevel.GRADE_11: 0,
+    StudentLevel.GRADE_12: 1,
+    StudentLevel.COLLEGE: 2,
+    StudentLevel.GRAD: 3,
+    StudentLevel.ALUMNI: 4,
     StudentLevel.OTHER: 0,
 }
 
