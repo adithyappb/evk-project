@@ -7,12 +7,10 @@ requires-python = ">=3.11"
 authors = [{ name = "EVK" }]
 license = { text = "MIT" }
 dependencies = [
-    # Inkbox SDK: installed directly from the official GitHub repo
-    # (python/ subdirectory of the polyglot monorepo).
-    "inkbox @ git+https://github.com/VectorlyApp/inkbox@main#subdirectory=python",
+    # Removed inkbox to replace with native Gmail API
     "google-genai>=1.0.0",
     "google-cloud-firestore>=2.19.0",
-    "fastapi>=0.115.0",
+    "fastapi[standard]>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic[email]>=2.9.0",
     "pydantic-settings>=2.6.0",

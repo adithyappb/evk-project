@@ -441,7 +441,11 @@ def test_concurrent_approvals_never_double_send(fake_repos, fake_inkbox, pending
 
     from evk.agents.ingestion import IngestionAgent as _Ing
     from evk.api import app
+    from evk.auth import AuthService, build_auth_notifier
+    from evk.config import get_settings
     from evk.ui.routes import (
+        _auth_dep,
+        _current_user,
         _distributor_dep,
         _ingestion_dep,
         _inkbox_dep,
@@ -449,12 +453,19 @@ def test_concurrent_approvals_never_double_send(fake_repos, fake_inkbox, pending
     )
 
     fake_repos.drafts.upsert(pending_draft)
+    settings = get_settings()
+    auth = AuthService(repos=fake_repos, notifier=build_auth_notifier(settings), settings=settings)
+    auth.ensure_bootstrap()
+    admin_user = fake_repos.users.get_by_email("admin@evkids.org")
+    assert admin_user is not None
     app.dependency_overrides[_repos_dep] = lambda: fake_repos
     app.dependency_overrides[_inkbox_dep] = lambda: fake_inkbox
     app.dependency_overrides[_ingestion_dep] = lambda: _Ing(repos=fake_repos, inkbox=fake_inkbox)
     app.dependency_overrides[_distributor_dep] = lambda: DistributorAgent(
         repos=fake_repos, inkbox=fake_inkbox
     )
+    app.dependency_overrides[_auth_dep] = lambda: auth
+    app.dependency_overrides[_current_user] = lambda: admin_user
     try:
         with TestClient(app) as client:
             results: list[int] = []

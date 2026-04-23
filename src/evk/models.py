@@ -26,16 +26,60 @@ class OpportunityKind(StrEnum):
     CONFERENCE = "conference"
     FELLOWSHIP = "fellowship"
     JOB = "job"
+    CAREER_FAIR = "career fair"
+    JOB_TRAINING = "job training"
+    SUMMER_JOB = "summer job"
+    COLLEGE_SUPPORT = "college support"
     GRANT = "grant"
     PROGRAM = "program"
     OTHER = "other"
 
+    @classmethod
+    def _missing_(cls, value: object) -> OpportunityKind | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        aliases = {
+            "career-fair": cls.CAREER_FAIR,
+            "job-training": cls.JOB_TRAINING,
+            "summer-job": cls.SUMMER_JOB,
+            "college-support": cls.COLLEGE_SUPPORT,
+        }
+        return aliases.get(normalized)
+
 
 class StudentLevel(StrEnum):
-    HIGH_SCHOOL = "high_school"
-    UNDERGRAD = "undergrad"
-    GRAD = "grad"
+    GRADE_11 = "11th grade"
+    GRADE_12 = "12th grade"
+    COLLEGE = "College year 1-4"
+    UNDERGRAD = "College year 1-4"
+    GRAD = "Graduate"
+    ALUMNI = "Alumni"
     OTHER = "other"
+
+    @classmethod
+    def _missing_(cls, value: object) -> StudentLevel | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        aliases = {
+            "11": cls.GRADE_11,
+            "grade 11": cls.GRADE_11,
+            "high_school": cls.GRADE_12,
+            "high school": cls.GRADE_12,
+            "12": cls.GRADE_12,
+            "grade 12": cls.GRADE_12,
+            "college": cls.COLLEGE,
+            "undergrad": cls.COLLEGE,
+            "undergraduate": cls.COLLEGE,
+            "college year 1-4": cls.COLLEGE,
+            "grad": cls.GRAD,
+            "graduate": cls.GRAD,
+            "graduate student": cls.GRAD,
+            "alumni": cls.ALUMNI,
+            "other": cls.OTHER,
+        }
+        return aliases.get(normalized)
 
 
 # --------------------------------------------------------------------------- #
@@ -116,16 +160,31 @@ class FirestoreDoc(BaseModel):
 class Student(FirestoreDoc):
     """A student profile used for opportunity matching."""
 
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
     name: str
     email: EmailStr
     level: StudentLevel
-    school: str = ""
+    school_name: str = Field(default="", alias="school")
     graduation_year: int | None = None
     fields_of_study: list[str] = Field(default_factory=list)
-    interests: list[str] = Field(default_factory=list)
+    career_interests: list[str] = Field(default_factory=list, alias="interests")
+    opportunity_types_sought: list[str] = Field(default_factory=list)
+    boston_resident: bool = False
+    first_generation: bool = False
     location: str = ""
     bio: str = ""
     opted_in: bool = True
+    preferred_notification_method: str = "email"
+    notification_frequency: str = "weekly"
+
+    @property
+    def school(self) -> str:
+        return self.school_name
+
+    @property
+    def interests(self) -> list[str]:
+        return self.career_interests
 
 
 class Opportunity(FirestoreDoc):
@@ -145,6 +204,7 @@ class Opportunity(FirestoreDoc):
     source_raw_email_id: str | None = None
     source_subject: str = ""
     source_sender: str = ""
+    is_duplicate: bool = False
 
 
 class RawEmailStatus(StrEnum):
@@ -206,16 +266,59 @@ class ReminderLog(FirestoreDoc):
     sent_at: datetime = Field(default_factory=_utcnow)
 
 
+class UserRole(StrEnum):
+    STUDENT = "student"
+    NGO_ADMIN = "ngo_admin"
+    ADMIN = "admin"
+
+
+class AppUser(FirestoreDoc):
+    """A person who can access the EVKids dashboards."""
+
+    email: EmailStr
+    name: str
+    role: UserRole
+    organization: str = ""
+    student_id: str | None = None
+    is_active: bool = True
+    access_key_salt: str
+    access_key_hash: str
+    last_login_at: datetime | None = None
+
+
+class LoginChallenge(FirestoreDoc):
+    """A single MFA challenge issued after the primary factor is validated."""
+
+    user_id: str
+    email: EmailStr
+    code_hash: str
+    expires_at: datetime
+    used_at: datetime | None = None
+
+
+class Session(FirestoreDoc):
+    """Server-side session stored for role-aware dashboard access."""
+
+    user_id: str
+    role: UserRole
+    expires_at: datetime
+    last_seen_at: datetime = Field(default_factory=_utcnow)
+
+
 __all__ = [
+    "AppUser",
     "ClassifierResult",
     "DraftMessage",
     "DraftStatus",
     "ExtractedOpportunity",
+    "LoginChallenge",
     "Opportunity",
     "OpportunityKind",
     "RawEmail",
     "RawEmailStatus",
     "ReminderLog",
+    "Session",
     "Student",
     "StudentLevel",
+    "UserRole",
 ]

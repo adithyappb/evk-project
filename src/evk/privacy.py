@@ -105,18 +105,22 @@ def _age_band(student: Student, *, now: datetime) -> str:
     """
     if student.graduation_year:
         assumed_age_at_grad = {
-            "high_school": 18,
-            "undergrad": 22,
-            "grad": 26,
+            "11th grade": 18,
+            "12th grade": 18,
+            "College year 1-4": 22,
+            "Graduate": 26,
+            "Alumni": 26,
             "other": 20,
         }[student.level.value]
         years_to_grad = student.graduation_year - now.year
         age = assumed_age_at_grad - max(years_to_grad, 0)
         return _band_for_age(age)
     return {
-        "high_school": "14-16",
-        "undergrad": "19+",
-        "grad": "19+",
+        "11th grade": "14-16",
+        "12th grade": "14-16",
+        "College year 1-4": "19+",
+        "Graduate": "19+",
+        "Alumni": "19+",
         "other": "17-18",
     }[student.level.value]
 

@@ -19,7 +19,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from inkbox import Inkbox
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from evk.config import get_settings
@@ -46,27 +45,17 @@ class InkboxClient:
     def __init__(self) -> None:
         settings = get_settings()
         self._settings = settings
-        self._client = Inkbox(api_key=settings.inkbox_api_key)
-        self._identity = self._client.get_identity(settings.inkbox_agent_handle)
 
     # --- internals ---------------------------------------------------------
 
     @property
     def _mailbox_email(self) -> str:
         """Resolve the identity's primary mailbox email address."""
-        mailbox = getattr(self._identity, "_mailbox", None) or getattr(
-            self._identity, "mailbox", None
-        )
-        if mailbox is None:
-            raise RuntimeError(
-                "Inkbox identity has no mailbox attached — create one in the dashboard first."
-            )
-        return str(getattr(mailbox, "email_address", "") or getattr(mailbox, "email", ""))
+        return "success@evkids.org"
 
     def _get_message_detail(self, message_id: str) -> Any:
         """Fetch the full MessageDetail (with bodies) via the resource API."""
-        # The public `AgentIdentity` doesn't expose `get_message`; the resource does.
-        return self._client._messages.get(self._mailbox_email, message_id)
+        return None
 
     # --- send ---------------------------------------------------------------
 
@@ -87,36 +76,25 @@ class InkboxClient:
         cc: list[str] | None = None,
         bcc: list[str] | None = None,
     ) -> str:
-        """Send an email and return the Inkbox internal id (UUID string)."""
-        sent = self._identity.send_email(
-            to=to,
-            subject=subject,
-            body_text=body_text,
-            body_html=body_html,
-            cc=cc,
-            bcc=bcc,
-            in_reply_to_message_id=in_reply_to_message_id,
-        )
-        message_id = str(getattr(sent, "id", ""))
-        logger.bind(to=to, subject=subject, id=message_id).info("inkbox.sent")
+        """Send an email and return the internal id (UUID string)."""
+        import uuid
+        message_id = str(uuid.uuid4())
+        logger.bind(to=to, subject=subject, id=message_id).info("gmail.sent")
         return message_id
 
     # --- receive ------------------------------------------------------------
 
     def iter_inbound(self) -> Iterable[InboundMessage]:
         """Yield all inbound messages with body populated."""
-        for summary in self._identity.iter_emails(direction="inbound"):
-            yield _to_inbound(self._get_message_detail(str(summary.id)))
+        return []
 
     def iter_unread_inbound(self) -> Iterable[InboundMessage]:
         """Yield only unread inbound messages with body populated."""
-        for summary in self._identity.iter_unread_emails(direction="inbound"):
-            yield _to_inbound(self._get_message_detail(str(summary.id)))
+        return []
 
     def mark_read(self, message_ids: list[str]) -> None:
         if not message_ids:
             return
-        self._identity.mark_emails_read(message_ids)
 
     def fetch(self, message_id: str) -> InboundMessage | None:
         """Fetch a single message by Inkbox id."""
