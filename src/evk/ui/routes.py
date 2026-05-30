@@ -378,9 +378,19 @@ def _render_drafts_with_stats(
 
 
 def _staff_redirect(request: Request, user: AppUser | None) -> RedirectResponse | None:
+    """Admin-only guard."""
     if user is None:
         return _redirect(request, "login_page")
     if user.role is UserRole.ADMIN:
+        return None
+    return _redirect(request, "app_home")
+
+
+def _staff_or_ngo_redirect(request: Request, user: AppUser | None) -> RedirectResponse | None:
+    """Guard that allows both Admin and NGO Admin — used for opportunity management."""
+    if user is None:
+        return _redirect(request, "login_page")
+    if user.role in (UserRole.ADMIN, UserRole.NGO_ADMIN):
         return None
     return _redirect(request, "app_home")
 
@@ -791,7 +801,7 @@ def opportunities_page(
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
 ) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
@@ -831,7 +841,7 @@ def opportunity_clear_review(
     current_user: AppUser | None = Depends(_current_user),
 ) -> RedirectResponse:
     """Admin clears the needs_review flag — opportunity enters the active catalogue."""
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     opp = repos.opportunities.get(opp_id)
@@ -849,7 +859,7 @@ def opportunity_archive(
     current_user: AppUser | None = Depends(_current_user),
 ) -> RedirectResponse:
     """Admin archives (soft-deletes) an opportunity — marks as duplicate so it disappears from catalogue."""
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     opp = repos.opportunities.get(opp_id)
@@ -859,6 +869,73 @@ def opportunity_archive(
     return _redirect(request, "opportunities_page")
 
 
+@router.post("/opportunities/{opp_id}/edit", name="opportunity_edit")
+def opportunity_edit(
+    opp_id: str,
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+    # Core fields
+    title: str = Form(""),
+    organization: str = Form(""),
+    kind: str = Form("other"),
+    summary: str = Form(""),
+    eligibility: str = Form(""),
+    deadline_str: str = Form(""),      # YYYY-MM-DD or empty
+    url: str = Form(""),
+    location: str = Form(""),
+    min_level: str = Form("other"),
+    # Comma-separated tag / field lists
+    tags_raw: str = Form(""),
+    fields_raw: str = Form(""),
+    # Review control
+    clear_review: str = Form(""),      # "yes" if admin checks the box
+) -> RedirectResponse:
+    """Save admin edits to an opportunity and optionally clear the review flag."""
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    opp = repos.opportunities.get(opp_id)
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    from evk.models import OpportunityKind, StudentLevel
+
+    # Parse deadline
+    deadline_dt: datetime | None = None
+    if deadline_str.strip():
+        try:
+            from datetime import date
+            d = date.fromisoformat(deadline_str.strip())
+            deadline_dt = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+        except ValueError:
+            pass  # bad date format — leave as None
+
+    # Normalise tag lists
+    tags = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
+    fields = [f.strip().lower() for f in fields_raw.split(",") if f.strip()]
+
+    patch: dict[str, object] = {
+        "title": title.strip() or opp.title,
+        "organization": organization.strip() or opp.organization,
+        "kind": OpportunityKind(kind) if kind else opp.kind,
+        "summary": summary.strip() or opp.summary,
+        "eligibility": eligibility.strip(),
+        "deadline": deadline_dt,
+        "url": url.strip() or None,
+        "location": location.strip(),
+        "min_level": StudentLevel(min_level) if min_level else opp.min_level,
+        "tags": tags if tags else opp.tags,
+        "fields_of_study": fields if fields else opp.fields_of_study,
+    }
+    if clear_review == "yes":
+        patch["needs_review"] = False
+        patch["review_reason"] = ""
+
+    repos.opportunities.patch(opp_id, patch)
+    return _redirect(request, "opportunity_detail", opp_id=opp_id)
+
+
 @router.get("/opportunities/{opp_id}", response_class=HTMLResponse, name="opportunity_detail")
 def opportunity_detail(
     opp_id: str,
@@ -866,7 +943,7 @@ def opportunity_detail(
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
 ) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
