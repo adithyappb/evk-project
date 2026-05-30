@@ -137,7 +137,18 @@ def to_opportunity(
     if deadline is not None and deadline < datetime.now(UTC):
         needs_review = True
         existing = f"{review_reason} | " if review_reason else ""
-        review_reason = f"{existing}Deadline {deadline.date().isoformat()} appears to be in the past — confirm or remove."
+        review_reason = f"{existing}Deadline {deadline.date().isoformat()} appears to be in the past — confirm or archive."
+
+    # Auto-flag: newsletter tracking/redirect URL (can't verify actual destination)
+    _TRACKING_PATTERNS = ("/c/443/", "link.hello.boston.gov", "list-manage.com",
+                          "/track/", "mailchimp.com/track", "click.mlsend")
+    if extracted.url and any(p in extracted.url for p in _TRACKING_PATTERNS):
+        needs_review = True
+        existing = f"{review_reason} | " if review_reason else ""
+        review_reason = (
+            f"{existing}URL is a newsletter tracking redirect — please replace with the "
+            "direct link to the opportunity and confirm it is still open."
+        )
 
     # Auto-flag: no deadline AND no URL (admin can't verify or act on this)
     if deadline is None and not extracted.url:
