@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}EVKids · Student Dashboard{% endblock %}
+{% block title %}EVkids · Student Dashboard{% endblock %}
 {% block content %}
 
 <section class="rounded-[2.2rem] border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50 px-7 py-8 shadow-glow">
@@ -9,7 +9,7 @@
     </div>
     <h1 class="mt-4 font-display text-4xl font-semibold tracking-tight text-slate-950">Welcome back{% if student %}, {{ student.name.split()[0] }}{% endif %}.</h1>
     <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
-      Keep an eye on opportunities EVKids matched to you, review outreach history, and make sure your profile stays aligned with what you want next.
+      Keep an eye on opportunities EVkids matched to you, review outreach history, and make sure your profile stays aligned with what you want next.
     </p>
   </div>
 </section>
@@ -34,7 +34,7 @@
     <div class="flex items-start justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold tracking-tight text-slate-950">Profile</h2>
-        <p class="mt-1 text-sm text-slate-500">Your current EVKids recipient profile.</p>
+        <p class="mt-1 text-sm text-slate-500">Your current EVkids recipient profile.</p>
       </div>
       {% if student %}
       <a href="mailto:{{ student.email }}" class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-700">Email</a>
@@ -68,7 +68,7 @@
     <div class="flex items-baseline justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold tracking-tight text-slate-950">Recent outreach</h2>
-        <p class="mt-1 text-sm text-slate-500">Messages EVKids has prepared or delivered for you.</p>
+        <p class="mt-1 text-sm text-slate-500">Messages EVkids has prepared or delivered for you.</p>
       </div>
       <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">{{ drafts|length }} items</span>
     </div>

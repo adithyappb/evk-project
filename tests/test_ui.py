@@ -72,7 +72,7 @@ def test_front_page_has_centered_login_path(ui_client):
     response = ui_client.get("/")
     assert response.status_code == 200
     body = response.text
-    assert "Beautifully simple access to the EVKids opportunity ecosystem." in body
+    assert "Beautifully simple access to the EVkids opportunity ecosystem." in body
     assert "Existing user" in body
     assert "New user" in body
     assert 'http://testserver/login' in body

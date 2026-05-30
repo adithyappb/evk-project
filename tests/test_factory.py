@@ -20,7 +20,8 @@ def _refresh():
 def test_local_mode_returns_stubs(monkeypatch):
     monkeypatch.setenv("EVK_MODE", "local")
     monkeypatch.setenv("INKBOX_API_KEY", "ApiKey_local_stub")
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "")       # override .env — empty = stub
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "")  # override .env so factory returns stub
     _refresh()
 
     wiring = describe_wiring()
@@ -49,6 +50,7 @@ def test_local_mode_with_google_api_key_upgrades_gemini(monkeypatch):
 def test_local_mode_reads_real_inkbox_when_key_looks_real(monkeypatch):
     monkeypatch.setenv("EVK_MODE", "local")
     monkeypatch.setenv("INKBOX_API_KEY", "real_looking_key_abcdef")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "")  # override .env so factory uses inkbox key
     _refresh()
     wiring = describe_wiring()
     assert wiring["inkbox"] == "real"

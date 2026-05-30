@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}EVK · Opportunities{% endblock %}
+{% block title %}EVkids · Opportunities{% endblock %}
 {% block content %}
 
 <section class="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 px-6 py-7 shadow-sm">
@@ -15,13 +15,60 @@
       <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Opportunities</h1>
       <p class="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Every tracked opportunity in one place, ordered so near-term deadlines stay easy to spot.</p>
     </div>
-    <div class="rounded-3xl border border-slate-200 bg-white px-5 py-4 text-right shadow-sm">
-      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Tracked now</div>
-      <div class="mt-2 text-3xl font-semibold tracking-tight text-slate-950 tabular-nums">{{ stats.opportunities }}</div>
+    <div class="flex gap-3">
+      {% if review_count > 0 %}
+      <div class="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-right shadow-sm">
+        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">Needs review</div>
+        <div class="mt-2 text-3xl font-semibold tracking-tight text-amber-700 tabular-nums">{{ review_count }}</div>
+      </div>
+      {% endif %}
+      <div class="rounded-3xl border border-slate-200 bg-white px-5 py-4 text-right shadow-sm">
+        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Active</div>
+        <div class="mt-2 text-3xl font-semibold tracking-tight text-slate-950 tabular-nums">{{ active_count }}</div>
+      </div>
     </div>
   </div>
 </section>
 
+{# ── Needs-review banner ── #}
+{% if opportunities_review %}
+<section class="mt-6 rounded-[1.75rem] border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div>
+      <div class="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">
+        ⚠ Admin review required
+      </div>
+      <h2 class="mt-2 text-base font-semibold text-slate-900">
+        {{ review_count }} {{ 'opportunity' if review_count == 1 else 'opportunities' }} flagged by the classifier
+      </h2>
+      <p class="mt-1 text-sm text-slate-600">
+        These were ingested but the classifier could not confirm key details (deadline, eligibility, or URL).
+        None will be sent to students until cleared here.
+      </p>
+    </div>
+  </div>
+  <ul class="mt-4 space-y-2">
+    {% for o in opportunities_review %}
+    <li>
+      <a href="{{ request.url_for('opportunity_detail', opp_id=o.inner.id) }}"
+         class="group flex items-start gap-3 rounded-2xl border border-amber-200 bg-white px-4 py-3.5 shadow-sm transition hover:border-amber-300 hover:shadow">
+        <div class="mt-0.5 shrink-0 text-base">⚠️</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-slate-900 group-hover:text-brand-700 truncate">{{ o.title }}</div>
+          <div class="text-xs text-slate-500 truncate">{{ o.kind.value }} · {{ o.organization or '—' }}</div>
+          {% if o.inner.review_reason %}
+          <div class="mt-1 text-xs text-amber-700 leading-5">{{ o.inner.review_reason }}</div>
+          {% endif %}
+        </div>
+        <svg class="mt-0.5 h-4 w-4 shrink-0 text-amber-400 group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{# ── Active catalogue ── #}
 <div class="mt-6">
   {% include "_opportunities_panel.html" %}
 </div>

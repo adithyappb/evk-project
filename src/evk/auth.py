@@ -86,9 +86,16 @@ class AuthNotifier:
 
 
 class TerminalAuthNotifier(AuthNotifier):
+    """Prints the OTP to stdout and keeps it in memory so routes can surface
+    it directly in the browser during local / dev mode."""
+
+    def __init__(self) -> None:
+        self.last_code: str | None = None
+
     def send_code(self, *, email: str, code: str) -> None:
+        self.last_code = code
         logger.bind(email=email, code=code).info("auth.otp_terminal")
-        print(f"[EVKids login] MFA code for {email}: {code}", flush=True)
+        print(f"[EVkids login] MFA code for {email}: {code}", flush=True)
 
 
 class SmtpAuthNotifier(AuthNotifier):
@@ -97,27 +104,44 @@ class SmtpAuthNotifier(AuthNotifier):
 
     def send_code(self, *, email: str, code: str) -> None:
         msg = EmailMessage()
-        msg["Subject"] = "EVKids verification code"
-        msg["From"] = self._settings.auth_smtp_sender
+        msg["Subject"] = "EVkids verification code"
+        msg["From"] = self._settings.effective_smtp_sender
         msg["To"] = email
         msg.set_content(
-            "Your EVKids verification code is "
-            f"{code}. It expires in {self._settings.login_code_ttl_minutes} minutes."
+            f"Your EVkids verification code is {code}. "
+            f"It expires in {self._settings.login_code_ttl_minutes} minutes."
         )
-        with smtplib.SMTP(self._settings.auth_smtp_host, self._settings.auth_smtp_port) as client:
-            if self._settings.auth_smtp_username:
-                client.starttls()
-                client.login(
-                    self._settings.auth_smtp_username,
-                    self._settings.auth_smtp_password,
-                )
-            client.send_message(msg)
-        logger.bind(email=email, host=self._settings.auth_smtp_host).info("auth.otp_smtp")
+        host = self._settings.effective_smtp_host
+        port = self._settings.effective_smtp_port
+        try:
+            with smtplib.SMTP(host, port, timeout=10) as client:
+                if self._settings.effective_smtp_username:
+                    client.ehlo()
+                    client.starttls()
+                    client.ehlo()
+                    client.login(
+                        self._settings.effective_smtp_username,
+                        self._settings.effective_smtp_password,
+                    )
+                client.send_message(msg)
+        except smtplib.SMTPAuthenticationError as exc:
+            logger.bind(email=email, host=host, error=str(exc)).error("auth.otp_smtp_auth_failed")
+            raise AuthError(
+                "Email delivery failed — the Gmail App Password was rejected. "
+                "Check GMAIL_APP_PASSWORD in .env and restart the server."
+            ) from exc
+        except (smtplib.SMTPException, OSError, UnicodeEncodeError) as exc:
+            logger.bind(email=email, host=host, error=str(exc)).error("auth.otp_smtp_error")
+            raise AuthError(
+                f"Email delivery failed ({type(exc).__name__}). "
+                "Check your SMTP/Gmail settings in .env."
+            ) from exc
+        logger.bind(email=email, host=host).info("auth.otp_smtp")
 
 
 def build_auth_notifier(settings: Settings | None = None) -> AuthNotifier:
     cfg = settings or get_settings()
-    if cfg.auth_email_delivery_mode == "smtp":
+    if cfg.gmail_app_password or cfg.auth_email_delivery_mode == "smtp":
         return SmtpAuthNotifier(cfg)
     return TerminalAuthNotifier()
 
@@ -197,7 +221,7 @@ class AuthService:
         self.repos.users.upsert(user)
         return user
 
-    def start_login(self, *, email: str, access_key: str) -> AppUser:
+    def start_login(self, *, email: str, access_key: str) -> tuple[AppUser, str | None]:
         self.ensure_bootstrap()
         email_norm = email.strip().lower()
         user = self.repos.users.get_by_email(email_norm)
@@ -219,11 +243,18 @@ class AuthService:
             email=user.email,
             code_hash=hash_login_code(code, user_id=user.id),
             expires_at=_utcnow() + timedelta(minutes=self.settings.login_code_ttl_minutes),
+            purpose="login",
         )
         self.repos.login_challenges.upsert(challenge)
         self.notifier.send_code(email=user.email, code=code)
         logger.bind(user_id=user.id).info("auth.challenge_created")
-        return user
+        # In terminal/dev mode expose the plain code so the browser can show it
+        code_hint = (
+            self.notifier.last_code  # type: ignore[attr-defined]
+            if isinstance(self.notifier, TerminalAuthNotifier)
+            else None
+        )
+        return user, code_hint
 
     def verify_login(self, *, email: str, code: str) -> tuple[AppUser, Session]:
         self.ensure_bootstrap()
@@ -236,7 +267,9 @@ class AuthService:
             (
                 challenge
                 for challenge in challenges
-                if challenge.used_at is None and challenge.expires_at >= _utcnow()
+                if challenge.purpose == "login"
+                and challenge.used_at is None
+                and challenge.expires_at >= _utcnow()
             ),
             None,
         )
@@ -275,6 +308,85 @@ class AuthService:
         if not session_id:
             return
         self.repos.sessions.delete(session_id)
+
+    def start_reset(self, *, email: str) -> str | None:
+        """Issue a password-reset code for a known email.
+
+        Returns plain code in terminal mode (for browser display), None otherwise.
+        Never reveals whether the email exists to the caller.
+        """
+        self.ensure_bootstrap()
+        email_norm = email.strip().lower()
+        user = self.repos.users.get_by_email(email_norm)
+        if user is None:
+            # Don't reveal whether the email exists; silently succeed.
+            logger.bind(email=email_norm).info("auth.reset_unknown_email")
+            return None
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        challenge = LoginChallenge(
+            id=f"reset_{user.id}_{secrets.token_hex(4)}",
+            user_id=user.id,
+            email=user.email,
+            code_hash=hash_login_code(code, user_id=user.id),
+            expires_at=_utcnow() + timedelta(minutes=self.settings.login_code_ttl_minutes),
+            purpose="reset",
+        )
+        self.repos.login_challenges.upsert(challenge)
+        self.notifier.send_code(email=user.email, code=code)
+        logger.bind(user_id=user.id).info("auth.reset_challenge_created")
+        code_hint = (
+            self.notifier.last_code  # type: ignore[attr-defined]
+            if isinstance(self.notifier, TerminalAuthNotifier)
+            else None
+        )
+        return code_hint
+
+    def complete_reset(self, *, email: str, code: str, new_access_key: str) -> "AppUser":
+        """Verify reset code and replace access key.
+
+        Raises AuthError on failure. Invalidates all sessions for the user.
+        """
+        self.ensure_bootstrap()
+        email_norm = email.strip().lower()
+        user = self.repos.users.get_by_email(email_norm)
+        if user is None:
+            raise AuthError("No account found for that email.")
+        if len(new_access_key.strip()) < 8:
+            raise AuthError("Use a new password with at least 8 characters.")
+        challenges = self.repos.login_challenges.list_for_user(user.id, limit=20)
+        active = next(
+            (
+                c
+                for c in challenges
+                if c.purpose == "reset"
+                and c.used_at is None
+                and c.expires_at >= _utcnow()
+            ),
+            None,
+        )
+        if active is None:
+            raise AuthError("No active reset code is available. Request a new one.")
+        if not verify_login_code(code.strip(), user_id=user.id, expected_hash=active.code_hash):
+            raise AuthError("That reset code is incorrect.")
+        self.repos.login_challenges.patch(active.id, {"used_at": _utcnow()})
+        # Update access key
+        salt = secrets.token_hex(8)
+        self.repos.users.patch(
+            user.id,
+            {
+                "access_key_salt": salt,
+                "access_key_hash": hash_access_key(new_access_key, salt=salt),
+            },
+        )
+        # Invalidate all sessions — list_for_user may not exist on SessionRepo,
+        # so we check defensively and skip if unavailable.
+        if hasattr(self.repos.sessions, "list_for_user"):
+            for session in self.repos.sessions.list_for_user(user.id):  # type: ignore[union-attr]
+                self.repos.sessions.delete(session.id)
+        refreshed = self.repos.users.get(user.id)
+        assert refreshed is not None
+        logger.bind(user_id=user.id).info("auth.reset_complete")
+        return refreshed
 
 
 __all__ = [

@@ -17,7 +17,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +75,31 @@ class Settings(BaseSettings):
     auth_smtp_sender: str = "login@evkids.local"
     auth_email_delivery_mode: Literal["terminal", "smtp"] = "terminal"
 
+    # ---- Gmail (IMAP + SMTP with App Password) ----------------------------
+    gmail_app_password: str | None = None
+    gmail_user: str = "evkidsorchestrator@gmail.com"
+    gmail_imap_host: str = "imap.gmail.com"
+    gmail_imap_port: int = 993
+
+    @field_validator("gmail_app_password", mode="before")
+    @classmethod
+    def _clean_gmail_password(cls, v: object) -> str | None:
+        """Strip whitespace and return None for blank/placeholder values.
+
+        pydantic-settings does NOT strip inline .env comments, so a line like
+        ``GMAIL_APP_PASSWORD=   # fill me in`` would land here as garbage text.
+        This validator normalises it to None so the stub path activates instead
+        of blowing up mid-login with a UnicodeEncodeError.
+        """
+        if v is None:
+            return None
+        cleaned = str(v).strip()
+        # Treat empty string or anything that is obviously a placeholder comment
+        # (starts with '#') as «not set».
+        if not cleaned or cleaned.startswith("#"):
+            return None
+        return cleaned
+
     # ---- Admin auth (optional bearer token; if empty, no auth enforced) ----
     admin_api_token: str | None = None
 
@@ -100,6 +125,36 @@ class Settings(BaseSettings):
     @property
     def reminder_days_before(self) -> list[int]:
         return [int(x.strip()) for x in self.reminder_days_before_raw.split(",") if x.strip()]
+
+    @property
+    def effective_smtp_host(self) -> str:
+        if self.gmail_app_password:
+            return "smtp.gmail.com"
+        return self.auth_smtp_host
+
+    @property
+    def effective_smtp_port(self) -> int:
+        if self.gmail_app_password:
+            return 587
+        return self.auth_smtp_port
+
+    @property
+    def effective_smtp_username(self) -> str:
+        if self.gmail_app_password:
+            return self.gmail_user
+        return self.auth_smtp_username
+
+    @property
+    def effective_smtp_password(self) -> str:
+        if self.gmail_app_password:
+            return self.gmail_app_password
+        return self.auth_smtp_password
+
+    @property
+    def effective_smtp_sender(self) -> str:
+        if self.gmail_app_password:
+            return self.gmail_user
+        return self.auth_smtp_sender
 
     @property
     def effective_firestore_project(self) -> str:

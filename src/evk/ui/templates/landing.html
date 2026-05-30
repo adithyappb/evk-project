@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}EVKids · Sign In{% endblock %}
+{% block title %}EVkids · Sign In{% endblock %}
 {% block content %}
 
 <section class="grid gap-8 lg:grid-cols-[1.08fr_0.92fr] items-start">
@@ -12,7 +12,7 @@
         Welcome
       </div>
       <h1 class="mt-6 font-sans text-5xl font-bold leading-[1.1] tracking-tight text-slate-900 sm:text-6xl">
-        Secure login for <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-amber-500">EVKids</span>
+        Secure login for <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-amber-500">EVkids</span>
       </h1>
       <p class="mt-6 max-w-xl text-lg leading-relaxed text-slate-500 font-medium">
         Sign in or create your account to continue.
@@ -75,6 +75,9 @@
           <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Password</span>
           <input name="access_key" type="password" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="•••••••••" />
         </label>
+        <div class="text-right">
+          <a href="{{ request.url_for('forgot_page') }}" class="text-[12px] font-semibold text-brand-600 hover:text-brand-700 transition">Forgot password?</a>
+        </div>
         <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-3.5 text-sm font-bold text-white shadow-md transition-all duration-200 hover:bg-slate-800 hover:shadow-lg active:scale-[0.98]">
           Continue
         </button>

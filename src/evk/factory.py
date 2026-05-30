@@ -45,6 +45,11 @@ def get_repos() -> Repos:
 @lru_cache(maxsize=1)
 def get_inkbox() -> Any:
     settings = get_settings()
+    if settings.gmail_app_password:
+        from evk.gmail_client import GmailEmailClient
+
+        logger.info("inkbox.gmail")
+        return GmailEmailClient()
     if settings.is_local and _looks_like_stub_key(settings.inkbox_api_key):
         from evk.stubs import StubInkbox
 
@@ -89,7 +94,11 @@ def describe_wiring(settings: Settings | None = None) -> dict[str, str]:
     return {
         "mode": s.evk_mode,
         "repos": "local_json" if s.is_local else "firestore",
-        "inkbox": "stub" if (s.is_local and _looks_like_stub_key(s.inkbox_api_key)) else "real",
+        "inkbox": (
+            "gmail"
+            if s.gmail_app_password
+            else ("stub" if (s.is_local and _looks_like_stub_key(s.inkbox_api_key)) else "real")
+        ),
         "gemini": (
             "stub"
             if (s.is_local and not s.google_api_key)

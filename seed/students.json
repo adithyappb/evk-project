@@ -34,5 +34,41 @@
     "opted_in": true,
     "preferred_notification_method": "email",
     "notification_frequency": "weekly"
+  },
+  {
+    "id": "student_amara",
+    "name": "Amara Osei",
+    "email": "amara.osei@example.edu",
+    "level": "College year 1-4",
+    "school_name": "UMass Boston",
+    "graduation_year": 2026,
+    "fields_of_study": ["biology", "healthcare", "life sciences"],
+    "career_interests": ["healthcare", "research", "STEM", "nursing", "community service"],
+    "opportunity_types_sought": ["internship", "research", "scholarship", "fellowship"],
+    "boston_resident": true,
+    "first_generation": false,
+    "location": "Boston, MA",
+    "bio": "Junior at UMass Boston studying Biology with a focus on healthcare and biomedical research. Interested in clinical research internships and health-sciences fellowships.",
+    "opted_in": true,
+    "preferred_notification_method": "email",
+    "notification_frequency": "weekly"
+  },
+  {
+    "id": "student_daniel",
+    "name": "Daniel Reyes",
+    "email": "daniel.reyes@example.edu",
+    "level": "College year 1-4",
+    "school_name": "Suffolk University",
+    "graduation_year": 2025,
+    "fields_of_study": ["political science", "pre-law"],
+    "career_interests": ["law", "policy", "social justice", "community service"],
+    "opportunity_types_sought": ["internship", "fellowship", "scholarship", "career fair"],
+    "boston_resident": true,
+    "first_generation": true,
+    "location": "Boston, MA",
+    "bio": "First-generation college student at Suffolk University studying Political Science on a pre-law track. Passionate about public interest law, social justice advocacy, and community organizing.",
+    "opted_in": true,
+    "preferred_notification_method": "email",
+    "notification_frequency": "weekly"
   }
 ]

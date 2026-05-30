@@ -141,5 +141,44 @@
     "tags": ["hackathon", "coding", "travel-funded", "international"],
     "fields_of_study": ["computer science"],
     "min_level": "College year 1-4"
+  },
+  {
+    "title": "Boston Bar Foundation Law Fellowship",
+    "kind": "fellowship",
+    "organization": "Boston Bar Foundation",
+    "summary": "Paid summer legal fellowship placing first-generation and underrepresented college students in Boston-area law firms and public interest organisations. Includes mentoring and bar-association networking.",
+    "eligibility": "First-generation or underrepresented college students pursuing law or policy careers. Boston area preferred.",
+    "deadline": "2026-03-01T00:00:00Z",
+    "url": "https://bostonbarfoundation.org/fellowships",
+    "location": "Boston, MA",
+    "tags": ["law", "policy", "fellowship", "first-generation", "social-justice", "paid"],
+    "fields_of_study": ["political science", "pre-law", "law", "public policy"],
+    "min_level": "College year 1-4"
+  },
+  {
+    "title": "ACLU Massachusetts Civil Liberties Internship",
+    "kind": "internship",
+    "organization": "ACLU of Massachusetts",
+    "summary": "Summer internship in civil rights litigation, advocacy, and community outreach. Interns work alongside staff attorneys on active cases and policy campaigns.",
+    "eligibility": "College juniors and seniors interested in civil liberties, social justice, or law. Stipend available.",
+    "deadline": "2026-02-28T00:00:00Z",
+    "url": "https://aclum.org/internship",
+    "location": "Boston, MA",
+    "tags": ["law", "social-justice", "policy", "community-service", "paid", "civil-rights"],
+    "fields_of_study": ["political science", "pre-law", "social work", "public policy"],
+    "min_level": "College year 1-4"
+  },
+  {
+    "title": "Dana-Farber Cancer Institute Research Internship",
+    "kind": "internship",
+    "organization": "Dana-Farber Cancer Institute",
+    "summary": "Hands-on summer research internship for undergraduates in biology, biochemistry, or health sciences. Work in a world-class oncology lab alongside faculty researchers.",
+    "eligibility": "College students majoring in biology, life sciences, or pre-medicine. Boston area.",
+    "deadline": "2026-02-15T00:00:00Z",
+    "url": "https://dana-farber.org/internship",
+    "location": "Boston, MA",
+    "tags": ["research", "biology", "healthcare", "stem", "paid", "lab"],
+    "fields_of_study": ["biology", "healthcare", "life sciences", "biochemistry"],
+    "min_level": "College year 1-4"
   }
 ]

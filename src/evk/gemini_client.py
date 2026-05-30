@@ -35,6 +35,25 @@ _DEFAULT_TEMPERATURE = 0.1
 _MAX_ATTEMPTS = 3
 
 
+def _strip_unsupported_schema_keys(obj: object) -> object:
+    """Recursively remove JSON-Schema keys unsupported by the Gemini Developer API.
+
+    The Gemini Developer API rejects ``additionalProperties``, ``$schema``, and
+    ``title`` at the top level, even though they are valid JSON Schema.  Pydantic's
+    ``.model_json_schema()`` emits them automatically, so we strip before sending.
+    """
+    _UNSUPPORTED = {"additionalProperties", "$schema", "title", "$defs"}
+    if isinstance(obj, dict):
+        return {
+            k: _strip_unsupported_schema_keys(v)
+            for k, v in obj.items()
+            if k not in _UNSUPPORTED
+        }
+    if isinstance(obj, list):
+        return [_strip_unsupported_schema_keys(item) for item in obj]
+    return obj
+
+
 class GeminiError(RuntimeError):
     """Raised when Gemini produces an unusable response (schema invalid / empty)."""
 
@@ -92,12 +111,17 @@ class GeminiClient:
         temperature: float = _DEFAULT_TEMPERATURE,
         max_output_tokens: int = 4096,
     ) -> T:
+        # Build a cleaned schema dict — the Gemini Developer API rejects
+        # additionalProperties, $schema, title, and $defs even though they are
+        # valid JSON Schema.  Pydantic emits them; we strip before sending.
+        raw_schema = schema.model_json_schema()
+        clean_schema = _strip_unsupported_schema_keys(raw_schema)
         config = genai_types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
             response_mime_type="application/json",
-            response_schema=schema,
+            response_schema=clean_schema,
         )
         raw = _call_with_retry(
             self._client,
@@ -105,8 +129,11 @@ class GeminiClient:
             contents=prompt,
             config=config,
         )
+        # Gemini may truncate mid-JSON if the response hits the token limit.
+        # Attempt a lightweight repair before validation.
+        repaired = _repair_truncated_json(raw)
         try:
-            return schema.model_validate_json(raw)
+            return schema.model_validate_json(repaired)
         except ValidationError as exc:
             # Schema failures are not retried: deterministic input + deterministic
             # model at T=0.1 means a second shot would produce the same garbage.
@@ -148,6 +175,57 @@ def _call_with_retry(
     if not text:
         raise _TransientGeminiError("empty response")
     return text
+
+
+def _repair_truncated_json(text: str) -> str:
+    """Best-effort repair of JSON truncated mid-response by a token limit.
+
+    Gemini occasionally cuts output mid-string when the response exceeds
+    ``max_output_tokens``.  We try to close any dangling structure so Pydantic
+    can at least parse what arrived.  If the JSON is already valid this is a
+    no-op.
+    """
+    import json as _json
+
+    text = text.strip()
+    try:
+        _json.loads(text)
+        return text  # already valid
+    except _json.JSONDecodeError:
+        pass
+
+    # Close unclosed strings, arrays, and objects.
+    # Strategy: count open/close brackets while tracking string context.
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]" and stack:
+            stack.pop()
+
+    # If we're mid-string, close it first.
+    suffix = '"' if in_string else ""
+    suffix += "".join(reversed(stack))
+
+    repaired = text + suffix
+    try:
+        _json.loads(repaired)
+        return repaired
+    except _json.JSONDecodeError:
+        return text  # give up; let Pydantic surface the real error
 
 
 __all__ = ["GeminiClient", "GeminiError"]

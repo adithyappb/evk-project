@@ -9,7 +9,12 @@ import evk.api as api_module
 from evk.api import app
 
 
-def test_health_returns_200_when_all_green():
+def test_health_returns_200_when_all_green(monkeypatch):
+    # Stub the Gemini healthcheck so the test never calls the real API.
+    # The health endpoint does: get_gemini().healthcheck() — patch the cached
+    # instance's method directly via api_module's imported reference.
+    import evk.api as _api
+    monkeypatch.setattr(_api, "get_gemini", lambda: type("_G", (), {"healthcheck": lambda self: True})())
     with TestClient(app) as client:
         resp = client.get("/health")
     assert resp.status_code == 200

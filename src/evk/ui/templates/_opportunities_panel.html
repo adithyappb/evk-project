@@ -24,8 +24,7 @@
     {% for o in opportunities %}
     <li>
       <a
-        href="{{ o.inner.url if o.inner.url else '#opportunities' }}"
-        {% if o.inner.url %}target="_blank" rel="noopener noreferrer"{% endif %}
+        href="{{ request.url_for('opportunity_detail', opp_id=o.inner.id) }}"
         class="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
       >
         <div class="w-16 shrink-0 text-center">
@@ -44,7 +43,7 @@
           <div class="truncate font-medium text-slate-900 transition group-hover:text-brand-700">{{ o.title }}</div>
           <div class="truncate text-xs text-slate-500">{{ o.kind.value }} · {{ o.organization }}</div>
         </div>
-        <svg class="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5h5v5M10 14 19 5"/><path d="M19 14v5H5V5h5"/></svg>
+        <svg class="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </a>
     </li>
     {% else %}

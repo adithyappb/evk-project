@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
 
@@ -94,17 +95,23 @@ class ExtractedOpportunity(BaseModel):
     avoid Python-only types so Vertex AI accepts it.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="ignore",          # tolerate bonus fields from Gemini
+        populate_by_name=True,   # allow both field name and alias
+    )
 
-    title: str = Field(description="Short human-readable opportunity title.")
-    kind: OpportunityKind = Field(description="Category of opportunity.")
-    organization: str = Field(description="Sponsoring organisation or company.")
-    summary: str = Field(description="1-3 sentence neutral summary of what this offers.")
+    # Core fields — all have defaults so partial Gemini responses don't hard-fail.
+    # Aliases catch Gemini's preferred alternative names (e.g. "name" vs "title").
+    title: str = Field(default="", alias="name", description="Short human-readable opportunity title.")
+    kind: OpportunityKind = Field(default=OpportunityKind.OTHER, description="Category of opportunity.")
+    organization: str = Field(default="", alias="org", description="Sponsoring organisation or company.")
+    summary: str = Field(default="", alias="description", description="1-3 sentence neutral summary of what this offers.")
     eligibility: str = Field(
         default="", description="Who can apply: grade level, fields, citizenship, etc."
     )
     deadline_iso: str | None = Field(
         default=None,
+        alias="deadline",
         description="Application deadline as ISO-8601 date (YYYY-MM-DD) or null if unknown.",
     )
     url: str | None = Field(default=None, description="Primary application / info URL.")
@@ -121,12 +128,34 @@ class ExtractedOpportunity(BaseModel):
         default=StudentLevel.OTHER,
         description="Minimum student level that can apply.",
     )
+    needs_review: bool = Field(
+        default=False,
+        description=(
+            "True when the classifier is uncertain — deadline missing/inferred, "
+            "eligibility vague, event may have passed, or URL absent. "
+            "Admin must review before this reaches students."
+        ),
+    )
+    review_reason: str = Field(
+        default="",
+        description="Plain-English explanation of why needs_review is true.",
+    )
+
+    @classmethod
+    def model_validate(cls, obj: object, **kwargs: object) -> "ExtractedOpportunity":  # type: ignore[override]
+        """Coerce None strings to empty string before validation."""
+        if isinstance(obj, dict):
+            obj = {
+                k: ("" if v is None and k in {"eligibility", "location", "organization", "summary", "title"} else v)
+                for k, v in obj.items()
+            }
+        return super().model_validate(obj, **kwargs)
 
 
 class ClassifierResult(BaseModel):
     """Top-level classifier response."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     is_opportunity: bool = Field(
         description=(
@@ -205,6 +234,11 @@ class Opportunity(FirestoreDoc):
     source_subject: str = ""
     source_sender: str = ""
     is_duplicate: bool = False
+    # Admin-review flag — set by classifier when deadline/eligibility is uncertain.
+    # Opportunities with needs_review=True are held in the review queue and never
+    # sent to students until an admin clears them.
+    needs_review: bool = False
+    review_reason: str = ""
 
 
 class RawEmailStatus(StrEnum):
@@ -294,6 +328,7 @@ class LoginChallenge(FirestoreDoc):
     code_hash: str
     expires_at: datetime
     used_at: datetime | None = None
+    purpose: Literal["login", "reset"] = "login"
 
 
 class Session(FirestoreDoc):

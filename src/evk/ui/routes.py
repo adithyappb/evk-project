@@ -190,12 +190,43 @@ def _role_summary(repos: Repos) -> dict[str, int]:
     return counts
 
 
+def _setup_status(repos: Repos, wiring: dict[str, str], settings: Settings) -> dict[str, object]:
+    """Compute pilot-setup checklist state from live data — used by the wizard card."""
+    raw_count = len(repos.raw_emails.list_all(limit=1))
+    sent_any = bool(repos.drafts.list_by_status(DraftStatus.SENT, limit=1))
+    # "real" students = more than the 4 bundled test seeds
+    real_students = len(repos.students.list_all()) > 4
+    # newsletter received = any raw email ingested beyond zero
+    newsletter_received = raw_count > 0
+    # opportunities beyond the 14 seeded ones = pipeline actually processed something
+    real_opps = len(repos.opportunities.list_all()) > 14
+    return {
+        "gmail_ok": wiring.get("inkbox") == "gmail",
+        "gemini_ok": wiring.get("gemini") != "stub",
+        "password_changed": settings.auth_local_demo_password != "ChangeMe123!",
+        "students_imported": real_students,
+        "newsletter_received": newsletter_received or real_opps,
+        "first_approval_done": sent_any,
+        # Derived convenience
+        "phase": (
+            1 if not (wiring.get("inkbox") == "gmail" and wiring.get("gemini") != "stub") else
+            2 if not (newsletter_received or real_opps) else
+            3 if not real_students else
+            4 if not sent_any else
+            5
+        ),
+    }
+
+
 def _dashboard_context(repos: Repos, current_user: AppUser) -> dict[str, object]:
+    wiring = describe_wiring()
+    settings = get_settings()
     return {
         "request": None,
         "current_user": current_user,
-        "wiring": describe_wiring(),
+        "wiring": wiring,
         "stats": _stats(repos),
+        "setup": _setup_status(repos, wiring, settings),
         "status_counts": _status_counts(repos),
         "students": repos.students.list_all(limit=50),
         "opportunities": _decorate_opps(repos.opportunities.list_all(limit=100)),
@@ -400,6 +431,7 @@ def login_page(
     request: Request,
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
+    flash: str | None = None,
 ) -> HTMLResponse:
     if current_user is not None:
         return _redirect(request, "app_home")
@@ -408,7 +440,7 @@ def login_page(
     return templates.TemplateResponse(
         request,
         "landing.html",
-        _auth_page_context(request, auth_view="existing"),
+        _auth_page_context(request, auth_view="existing", flash=flash),
     )
 
 
@@ -447,7 +479,7 @@ def auth_signup(
             access_key=access_key,
             organization=organization,
         )
-        auth.start_login(email=user.email, access_key=access_key)
+        _, dev_code = auth.start_login(email=user.email, access_key=access_key)
         return templates.TemplateResponse(
             request,
             "auth_verify.html",
@@ -458,6 +490,7 @@ def auth_signup(
                 "email": user.email,
                 "flash": "Account created. Enter the verification code to finish signing in.",
                 "delivery_mode": auth.settings.auth_email_delivery_mode,
+                "dev_code": dev_code,
             },
         )
     except (AuthError, ValueError) as exc:
@@ -477,7 +510,7 @@ def auth_login(
     auth: AuthService = Depends(_auth_dep),
 ) -> HTMLResponse:
     try:
-        user = auth.start_login(email=email, access_key=access_key)
+        user, dev_code = auth.start_login(email=email, access_key=access_key)
         return templates.TemplateResponse(
             request,
             "auth_verify.html",
@@ -486,8 +519,9 @@ def auth_login(
                 "current_user": None,
                 "wiring": describe_wiring(),
                 "email": user.email,
-                "flash": "Verification code sent. In local mode, check the server terminal output.",
+                "flash": "Verification code sent.",
                 "delivery_mode": auth.settings.auth_email_delivery_mode,
+                "dev_code": dev_code,
             },
         )
     except AuthError as exc:
@@ -526,6 +560,79 @@ def auth_verify(
     response = _redirect(request, _role_home(user))
     _set_session_cookie(response, session.id, settings)
     return response
+
+
+@router.get("/forgot", response_class=HTMLResponse, name="forgot_page")
+def forgot_page(
+    request: Request,
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    if current_user is not None:
+        return _redirect(request, "app_home")
+    return templates.TemplateResponse(
+        request,
+        "forgot.html",
+        {
+            "request": request,
+            "current_user": None,
+            "wiring": describe_wiring(),
+            "flash": None,
+        },
+    )
+
+
+@router.post("/auth/forgot", response_class=HTMLResponse, name="auth_forgot")
+def auth_forgot(
+    request: Request,
+    email: str = Form(...),
+    auth: AuthService = Depends(_auth_dep),
+) -> HTMLResponse:
+    dev_code = auth.start_reset(email=email)
+    return templates.TemplateResponse(
+        request,
+        "reset_verify.html",
+        {
+            "request": request,
+            "current_user": None,
+            "wiring": describe_wiring(),
+            "email": email.strip().lower(),
+            "flash": None,
+            "dev_code": dev_code,
+            "delivery_mode": auth.settings.auth_email_delivery_mode,
+        },
+    )
+
+
+@router.post("/auth/reset", response_class=HTMLResponse, name="auth_reset")
+def auth_reset(
+    request: Request,
+    email: str = Form(...),
+    code: str = Form(...),
+    new_access_key: str = Form(...),
+    auth: AuthService = Depends(_auth_dep),
+) -> HTMLResponse:
+    try:
+        auth.complete_reset(email=email, code=code, new_access_key=new_access_key)
+    except AuthError as exc:
+        return templates.TemplateResponse(
+            request,
+            "reset_verify.html",
+            {
+                "request": request,
+                "current_user": None,
+                "wiring": describe_wiring(),
+                "email": email,
+                "flash": str(exc),
+                "dev_code": None,
+                "delivery_mode": auth.settings.auth_email_delivery_mode,
+            },
+            status_code=400,
+        )
+    response = _redirect(request, "login_page")
+    # Carry flash message via query param so landing.html can show it
+    from fastapi.responses import RedirectResponse as _RR
+    url = str(request.url_for("login_page")) + "?flash=Password+updated+%E2%80%94+sign+in+with+your+new+password."
+    return _RR(url, status_code=303)
 
 
 @router.post("/auth/logout", name="logout")
@@ -688,13 +795,17 @@ def opportunities_page(
     if guard is not None:
         return guard
     assert current_user is not None
-    opps = repos.opportunities.list_all(limit=100)
+    all_opps = repos.opportunities.list_all(limit=200)
+    active = [o for o in all_opps if not o.needs_review and not o.is_duplicate]
+    needs_review = [o for o in all_opps if o.needs_review]
+
     if sort == "deadline":
-        opps = sorted(opps, key=lambda o: (o.deadline or datetime.max.replace(tzinfo=UTC), o.title))
+        active = sorted(active, key=lambda o: (o.deadline or datetime.max.replace(tzinfo=UTC), o.title))
     elif sort == "title":
-        opps = sorted(opps, key=lambda o: o.title)
+        active = sorted(active, key=lambda o: o.title)
     elif sort == "organization":
-        opps = sorted(opps, key=lambda o: o.organization)
+        active = sorted(active, key=lambda o: o.organization)
+
     return templates.TemplateResponse(
         request,
         "opportunities_page.html",
@@ -703,8 +814,102 @@ def opportunities_page(
             "current_user": current_user,
             "wiring": describe_wiring(),
             "stats": _stats(repos),
-            "opportunities": _decorate_opps(opps),
+            "opportunities": _decorate_opps(active),
+            "opportunities_review": _decorate_opps(needs_review),
+            "active_count": len(active),
+            "review_count": len(needs_review),
             "sort": sort,
+        },
+    )
+
+
+@router.post("/opportunities/{opp_id}/clear-review", name="opportunity_clear_review")
+def opportunity_clear_review(
+    opp_id: str,
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    """Admin clears the needs_review flag — opportunity enters the active catalogue."""
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    opp = repos.opportunities.get(opp_id)
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    repos.opportunities.patch(opp_id, {"needs_review": False, "review_reason": ""})
+    return _redirect(request, "opportunity_detail", opp_id=opp_id)
+
+
+@router.post("/opportunities/{opp_id}/archive", name="opportunity_archive")
+def opportunity_archive(
+    opp_id: str,
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    """Admin archives (soft-deletes) an opportunity — marks as duplicate so it disappears from catalogue."""
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    opp = repos.opportunities.get(opp_id)
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    repos.opportunities.patch(opp_id, {"is_duplicate": True, "needs_review": False})
+    return _redirect(request, "opportunities_page")
+
+
+@router.get("/opportunities/{opp_id}", response_class=HTMLResponse, name="opportunity_detail")
+def opportunity_detail(
+    opp_id: str,
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    assert current_user is not None
+    opp = repos.opportunities.get(opp_id)
+    if opp is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    # Compute per-student match scores (cheap rule-based — no Gemini call).
+    from evk.agents.personalizer import score_match
+    students = repos.students.list_all(limit=200)
+    matches = sorted(
+        [score_match(s, opp) for s in students],
+        key=lambda m: m.score,
+        reverse=True,
+    )
+
+    # Find source email if ingested from Gmail
+    source_email = None
+    if opp.source_raw_email_id:
+        source_email = repos.raw_emails.get(opp.source_raw_email_id)
+
+    # Find any existing drafts for this opportunity
+    all_drafts = repos.drafts.list_all(limit=500)
+    opp_drafts = [d for d in all_drafts if d.opportunity_id == opp_id]
+
+    today = datetime.now(UTC).date()
+    days_until: int | None = None
+    if opp.deadline:
+        delta = (opp.deadline.date() - today).days
+        days_until = delta if delta >= 0 else None
+
+    return templates.TemplateResponse(
+        request,
+        "opportunity_detail.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "opp": opp,
+            "days_until": days_until,
+            "matches": matches,
+            "source_email": source_email,
+            "drafts": opp_drafts,
         },
     )
 

@@ -21,23 +21,38 @@ from evk.models import (
 _SYSTEM_INSTRUCTION = """\
 You are an expert classifier for a student-opportunities newsletter pipeline.
 
-You receive the full body of an email that was sent to a shared inbox. Decide
-whether the email advertises one or more concrete, student-applicable
-opportunities (scholarship, internship, hackathon, competition, fellowship,
-conference, grant, program, or job) and, if so, extract each one.
+You receive the full body of an email sent to a shared inbox. Extract concrete,
+student-applicable opportunities (scholarship, internship, hackathon, fellowship,
+program, job, conference, competition) and flag anything uncertain for human review.
 
-Rules:
-- Only set `is_opportunity=true` when there is a specific thing a student can
-  apply to, not general news, funding announcements for existing grantees,
-  marketing, or aggregator digests without dates/links.
-- Extract one entry per distinct opportunity. If an email bundles five,
-  return five entries.
-- Dates must be ISO-8601 calendar dates (YYYY-MM-DD). If only a month/year is
-  given, use the last day of that month. If truly unknown, use null.
-- `kind` must be one of the enum values. Use `other` only as last resort.
-- Never invent URLs; only copy links that appear in the email.
-- `tags` and `fields_of_study` must be short lowercase strings.
-- Be conservative: if in doubt, set is_opportunity=false and return an empty list.
+STRICT RULES — follow these exactly:
+
+deadline_iso:
+  - Set ONLY when the email explicitly states an APPLICATION or REGISTRATION deadline
+    in plain text (e.g. "Apply by June 15", "Deadline: 2026-07-01", "Register by...").
+  - Event dates, session dates, program start dates, and cohort dates are NOT
+    application deadlines. If an email says "starts June 2" that is NOT a deadline.
+  - If no explicit application deadline is stated: set deadline_iso to null.
+  - NEVER infer or guess a deadline. When in doubt: null.
+
+needs_review / review_reason:
+  - Set needs_review=true and explain in review_reason whenever:
+      * The deadline is unclear, missing, or you used an event date as a proxy.
+      * Eligibility criteria are vague or not stated.
+      * The opportunity may already be past (event date appears to have passed).
+      * The URL is missing and you cannot verify the opportunity exists.
+  - An admin will review these before they reach students — it is always better
+    to flag than to guess.
+
+Other rules:
+  - Only set is_opportunity=true for things a student can actively apply to.
+    Not general news, marketing, or funding for existing grantees.
+  - Extract one entry per distinct opportunity (if an email has five, return five).
+  - kind must be one of the enum values; use "other" only as last resort.
+  - Never invent URLs; only copy links that appear verbatim in the email.
+  - tags and fields_of_study must be short lowercase strings.
+  - organization: the sponsoring org name exactly as stated; empty string if not named.
+  - summary: 1-3 sentences describing what is on offer. Never invent details.
 """
 
 
@@ -58,6 +73,7 @@ class ClassifierAgent:
             schema=ClassifierResult,
             system_instruction=_SYSTEM_INSTRUCTION,
             temperature=0.1,
+            max_output_tokens=8192,  # newsletters can contain many opportunities
         )
         logger.bind(
             raw_email_id=email.id,
@@ -100,7 +116,12 @@ def to_opportunity(
     *,
     source_raw_email: RawEmail,
 ) -> Opportunity:
-    """Convert a Gemini-extracted opportunity into a canonical Opportunity record."""
+    """Convert a Gemini-extracted opportunity into a canonical Opportunity record.
+
+    Applies additional auto-flagging on top of whatever Gemini already set:
+    - Past deadline → needs_review (admin decides whether to archive or update)
+    - No deadline + no URL → needs_review (too little info to act on)
+    """
     from evk.firestore_repo import OpportunityRepo
 
     deadline = _parse_deadline(extracted.deadline_iso)
@@ -108,6 +129,22 @@ def to_opportunity(
         title=extracted.title,
         deadline_iso=extracted.deadline_iso,
     )
+
+    needs_review = extracted.needs_review
+    review_reason = extracted.review_reason.strip()
+
+    # Auto-flag: deadline in the past
+    if deadline is not None and deadline < datetime.now(UTC):
+        needs_review = True
+        existing = f"{review_reason} | " if review_reason else ""
+        review_reason = f"{existing}Deadline {deadline.date().isoformat()} appears to be in the past — confirm or remove."
+
+    # Auto-flag: no deadline AND no URL (admin can't verify or act on this)
+    if deadline is None and not extracted.url:
+        needs_review = True
+        existing = f"{review_reason} | " if review_reason else ""
+        review_reason = f"{existing}No deadline and no URL — admin should verify this opportunity is still open."
+
     return Opportunity(
         id=doc_id,
         title=extracted.title.strip(),
@@ -124,6 +161,8 @@ def to_opportunity(
         source_raw_email_id=source_raw_email.id,
         source_subject=source_raw_email.subject,
         source_sender=source_raw_email.from_address,
+        needs_review=needs_review,
+        review_reason=review_reason,
     )
 
 
