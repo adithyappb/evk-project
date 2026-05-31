@@ -122,8 +122,8 @@ class Settings(BaseSettings):
     dedup_deadline_window_days: int = 30  # pre-filter before any fuzzy match
 
     # ---- Scheduler -------------------------------------------------------
-    auto_poll: bool = False           # set True in .env to start scheduler with server
-    poll_interval_minutes: int = 30   # how often to poll Gmail
+    auto_poll: bool = False             # set True in .env to start scheduler with server
+    poll_interval_minutes: int = 1440  # how often to poll Gmail — default daily
 
     @computed_field  # type: ignore[misc]
     @property

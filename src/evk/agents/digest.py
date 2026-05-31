@@ -133,7 +133,7 @@ class DigestAgent:
         }
         body_html = self._env.get_template("digest_email.html").render(**ctx)
         body_text = self._env.get_template("digest_email.txt").render(**ctx)
-        subject = f"Your EVK picks this week — {len(picks)} opportunit" + (
+        subject = f"Your EVkids picks this week — {len(picks)} opportunit" + (
             "y" if len(picks) == 1 else "ies"
         )
         return StudentDigest(

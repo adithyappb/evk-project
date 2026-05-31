@@ -9,28 +9,111 @@
 
   <ul class="mt-5 space-y-2">
     {% for s in students %}
-    <li class="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm">
-      <a href="mailto:{{ s.email }}" class="group flex items-center gap-3 flex-1 min-w-0">
-        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
-          {{ (s.name.split()[0][:1] + (s.name.split()[-1][:1] if s.name.split()|length > 1 else ''))|upper }}
+    <li class="rounded-2xl border border-slate-100 bg-slate-50/80 transition hover:border-slate-200 hover:bg-white hover:shadow-sm">
+
+      {# ── Collapsed header row ── #}
+      <details class="group">
+        <summary class="flex cursor-pointer list-none items-center gap-3 px-3 py-3 text-sm">
+          <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+            {{ (s.name.split()[0][:1] + (s.name.split()[-1][:1] if s.name.split()|length > 1 else ''))|upper }}
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="truncate font-medium text-slate-900">{{ s.name }}</div>
+            <div class="truncate text-xs text-slate-500">{{ s.level.value.replace('_', ' ') }} · {{ s.school or "—" }}</div>
+          </div>
+          {% if not s.opted_in %}
+          <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 shrink-0">inactive</span>
+          {% endif %}
+          <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+
+        {# ── Expanded profile details ── #}
+        <div class="border-t border-slate-100 px-4 pb-4 pt-3 space-y-3">
+
+          {# Contact + actions #}
+          <div class="flex flex-wrap items-center gap-2">
+            <a href="mailto:{{ s.email }}"
+               class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:border-brand-300 hover:text-brand-700">
+              {{ s.email }}
+            </a>
+            {% if not s.opted_in %}
+            <form method="post" action="{{ request.url_for('student_activate', student_id=s.id) }}" class="inline">
+              <button type="submit"
+                class="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-100 transition">
+                Activate →
+              </button>
+            </form>
+            {% endif %}
+          </div>
+
+          {# Profile fields in a 2-col grid #}
+          <dl class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 text-xs">
+
+            {% if s.location %}
+            <div><dt class="font-semibold text-slate-500">Location</dt><dd class="text-slate-800">{{ s.location }}</dd></div>
+            {% endif %}
+
+            {% if s.graduation_year %}
+            <div><dt class="font-semibold text-slate-500">Grad year</dt><dd class="text-slate-800">{{ s.graduation_year }}</dd></div>
+            {% endif %}
+
+            {% if s.boston_resident is not none %}
+            <div><dt class="font-semibold text-slate-500">Boston resident</dt><dd class="text-slate-800">{{ 'Yes' if s.boston_resident else 'No' }}</dd></div>
+            {% endif %}
+
+            {% if s.first_generation is not none %}
+            <div><dt class="font-semibold text-slate-500">First-generation</dt><dd class="text-slate-800">{{ 'Yes' if s.first_generation else 'No' }}</dd></div>
+            {% endif %}
+
+            {% if s.notification_frequency %}
+            <div><dt class="font-semibold text-slate-500">Notifications</dt><dd class="text-slate-800">{{ s.notification_frequency }}</dd></div>
+            {% endif %}
+
+          </dl>
+
+          {% if s.career_interests %}
+          <div>
+            <div class="text-xs font-semibold text-slate-500 mb-1.5">Career interests</div>
+            <div class="flex flex-wrap gap-1">
+              {% for interest in s.career_interests %}
+              <span class="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">{{ interest }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if s.fields_of_study %}
+          <div>
+            <div class="text-xs font-semibold text-slate-500 mb-1.5">Fields of study</div>
+            <div class="flex flex-wrap gap-1">
+              {% for field in s.fields_of_study %}
+              <span class="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">{{ field }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if s.opportunity_types_sought %}
+          <div>
+            <div class="text-xs font-semibold text-slate-500 mb-1.5">Looking for</div>
+            <div class="flex flex-wrap gap-1">
+              {% for otype in s.opportunity_types_sought %}
+              <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">{{ otype }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% if s.bio %}
+          <div>
+            <div class="text-xs font-semibold text-slate-500 mb-1">Bio</div>
+            <p class="text-xs leading-5 text-slate-700">{{ s.bio }}</p>
+          </div>
+          {% endif %}
+
         </div>
-        <div class="min-w-0 flex-1">
-          <div class="truncate font-medium text-slate-900">{{ s.name }}</div>
-          <div class="truncate text-xs text-slate-500">{{ s.level.value.replace('_', ' ') }} · {{ s.school or "—" }}</div>
-        </div>
-        {% if not s.opted_in %}
-        <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 shrink-0">inactive</span>
-        {% endif %}
-        <span class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 transition group-hover:border-brand-300 group-hover:text-brand-700 shrink-0">email</span>
-      </a>
-      {% if not s.opted_in %}
-      <form method="post" action="{{ request.url_for('student_activate', student_id=s.id) }}">
-        <button type="submit"
-          class="rounded-xl border border-brand-200 bg-brand-50 px-3 py-1.5 text-[11px] font-bold text-brand-700 shadow-sm hover:bg-brand-100 transition shrink-0">
-          Activate
-        </button>
-      </form>
-      {% endif %}
+      </details>
+
     </li>
     {% else %}
     <li class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
