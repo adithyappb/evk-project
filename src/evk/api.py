@@ -52,12 +52,33 @@ async def _lifespan(_app: FastAPI):
     configure_logging()
     logger.info("evk.api.starting")
     # Warm heavy singletons so the first request isn't penalised.
-    get_settings()
+    settings = get_settings()
     try:
         get_inkbox()
         get_repos()
     except Exception:
         logger.exception("evk.api.client_init_failed")
+
+    if settings.auto_poll:
+        import threading
+
+        def _poll_loop() -> None:
+            import time
+            while True:
+                try:
+                    repos = get_repos()
+                    inkbox = get_inkbox()
+                    agent = IngestionAgent(repos=repos, inkbox=inkbox)
+                    agent.poll_unread()
+                    logger.info("scheduler.poll_ok")
+                except Exception:
+                    logger.exception("scheduler.poll_failed")
+                time.sleep(settings.poll_interval_minutes * 60)
+
+        t = threading.Thread(target=_poll_loop, daemon=True, name="evk-scheduler")
+        t.start()
+        logger.bind(interval_minutes=settings.poll_interval_minutes).info("scheduler.started")
+
     yield
     logger.info("evk.api.stopping")
 

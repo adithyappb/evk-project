@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -18,9 +18,10 @@ from evk.agents.reminder import ReminderAgent
 from evk.auth import AuthError, AuthService, TerminalAuthNotifier, build_auth_notifier
 from evk.config import Settings, get_settings
 from evk.factory import describe_wiring, get_inkbox, get_repos
+from evk.logging import logger
 from evk.firestore_repo import Repos
 from evk.inkbox_client import InboundMessage, InkboxClient
-from evk.models import AppUser, DraftMessage, DraftStatus, LoginChallenge, Opportunity, UserRole
+from evk.models import AppUser, DraftMessage, DraftStatus, LoginChallenge, Opportunity, Student, StudentLevel, UserRole
 from evk.ui import TEMPLATES_DIR
 
 router = APIRouter(tags=["ui"])
@@ -1173,6 +1174,49 @@ def ui_reject(
     )
 
 
+@router.post("/ui/drafts/{draft_id}/save-edit", response_class=HTMLResponse)
+def ui_save_edit(
+    draft_id: str,
+    request: Request,
+    subject: str = Form(...),
+    body_text: str = Form(...),
+    action: str = Form("pending"),   # "pending" or "approve"
+    status_filter: str = "pending_approval",
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+    inkbox: InkboxClient = Depends(_inkbox_dep),
+) -> HTMLResponse:
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    user = _staff_required(current_user)
+    draft = repos.drafts.get(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    # Save edits
+    repos.drafts.patch(draft_id, {
+        "subject": subject.strip(),
+        "body_text": body_text.strip(),
+        "body_html": f"<p>{body_text.strip().replace(chr(10), '</p><p>')}</p>",
+        "status": DraftStatus.PENDING_APPROVAL.value,
+    })
+    # If admin chose approve directly, approve then send it now
+    if action == "approve":
+        repos.drafts.patch(draft_id, {
+            "status": DraftStatus.APPROVED.value,
+            "approved_by": user.email,
+            "approved_at": datetime.now(UTC),
+        })
+        updated = repos.drafts.get(draft_id)
+        if updated:
+            try:
+                dist = DistributorAgent(repos=repos, inkbox=inkbox)
+                dist.send_one(updated)
+            except Exception:
+                pass
+    return _render_drafts_panel(request, repos, status_filter, user)
+
+
 @router.post("/ui/poll", response_class=HTMLResponse)
 def ui_poll(
     request: Request,
@@ -1242,6 +1286,221 @@ def ui_simulate(
         f"Captured {len(raw.extracted_opportunity_ids)} opportunities."
     )
     return _render_stats(request, repos, user, flash=flash)
+
+
+@router.post("/admin/students/import", name="students_import")
+async def students_import(
+    request: Request,
+    file: UploadFile = File(...),
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    """Parse a CSV and bulk-create inactive Student + AppUser records."""
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    import csv
+    import io
+    import secrets as _sec
+    from evk.auth import hash_access_key
+
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    for row in reader:
+        email = (row.get("email") or row.get("Email") or "").strip().lower()
+        name = (row.get("name") or row.get("Name") or "").strip()
+        school = (row.get("school") or row.get("School") or row.get("school_name") or "").strip()
+        level_raw = (row.get("level") or row.get("Level") or row.get("grade") or "").strip()
+        if not email or "@" not in email:
+            continue
+        if repos.students.get_by_email(email):
+            continue
+        try:
+            level = StudentLevel(level_raw) if level_raw else StudentLevel.OTHER
+        except ValueError:
+            level = StudentLevel.OTHER
+        sid = f"student_{_sec.token_hex(6)}"
+        student = Student(
+            id=sid,
+            name=name or email.split("@")[0],
+            email=email,
+            level=level,
+            school_name=school,
+            opted_in=False,
+        )
+        repos.students.upsert(student)
+        # Create inactive user
+        salt = _sec.token_hex(8)
+        tmp_pw = _sec.token_urlsafe(16)
+        user = AppUser(
+            id=f"user_student_{sid}",
+            email=email,
+            name=name or email.split("@")[0],
+            role=UserRole.STUDENT,
+            organization=school,
+            student_id=sid,
+            access_key_salt=salt,
+            access_key_hash=hash_access_key(tmp_pw, salt=salt),
+            is_active=False,
+        )
+        repos.users.upsert(user)
+    return _redirect(request, "students_page")
+
+
+@router.post("/admin/students/{student_id}/activate", name="student_activate")
+def student_activate(
+    student_id: str,
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    auth: AuthService = Depends(_auth_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    student = repos.students.get(student_id)
+    if student is None:
+        raise HTTPException(status_code=404)
+    user = repos.users.get_by_email(student.email)
+    if user is None:
+        raise HTTPException(status_code=404)
+    import secrets
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(UTC) + timedelta(days=7)
+    repos.users.patch(user.id, {
+        "activation_token": token,
+        "activation_token_expires": expires.isoformat(),
+        "is_active": False,
+    })
+    repos.students.patch(student_id, {"opted_in": True})
+    settings = get_settings()
+    setup_url = (
+        str(settings.admin_base_url).rstrip("/")
+        + f"/profile/setup?token={token}&email={student.email}"
+    )
+    try:
+        auth.send_welcome_email(student_email=student.email, setup_url=setup_url)
+    except Exception:
+        logger.exception("student_activate.welcome_email_failed")
+    return _redirect(request, "students_page")
+
+
+@router.get("/profile/setup", response_class=HTMLResponse, name="profile_setup_page")
+def profile_setup_page(
+    request: Request,
+    token: str = "",
+    email: str = "",
+    repos: Repos = Depends(_repos_dep),
+    flash: str = "",
+) -> HTMLResponse:
+    from datetime import datetime as _dt
+    user = repos.users.get_by_email(email.strip().lower()) if email else None
+    if not user or user.activation_token != token:
+        return templates.TemplateResponse(
+            request,
+            "profile_setup.html",
+            {"request": request, "valid": False, "email": email,
+             "flash": "This link is invalid or has expired.",
+             "current_user": None, "wiring": describe_wiring()},
+        )
+    expires = user.activation_token_expires
+    if expires:
+        exp_dt = _dt.fromisoformat(str(expires)) if isinstance(expires, str) else expires
+        if exp_dt.replace(tzinfo=UTC) < datetime.now(UTC):
+            return templates.TemplateResponse(
+                request,
+                "profile_setup.html",
+                {"request": request, "valid": False, "email": email,
+                 "flash": "This link has expired. Ask an admin to resend your welcome email.",
+                 "current_user": None, "wiring": describe_wiring()},
+            )
+    return templates.TemplateResponse(
+        request,
+        "profile_setup.html",
+        {"request": request, "valid": True, "email": email, "token": token,
+         "flash": flash, "current_user": None, "wiring": describe_wiring()},
+    )
+
+
+@router.post("/profile/setup", name="profile_setup_submit")
+def profile_setup_submit(
+    request: Request,
+    email: str = Form(...),
+    token: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    career_interests: list[str] = Form(default=[]),
+    opportunity_types: list[str] = Form(default=[]),
+    notification_frequency: str = Form("weekly"),
+    repos: Repos = Depends(_repos_dep),
+) -> HTMLResponse:
+    user = repos.users.get_by_email(email.strip().lower())
+    if not user or user.activation_token != token:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    if password != confirm_password or len(password) < 8:
+        return templates.TemplateResponse(
+            request,
+            "profile_setup.html",
+            {"request": request, "valid": True, "email": email, "token": token,
+             "flash": "Passwords must match and be at least 8 characters.",
+             "current_user": None, "wiring": describe_wiring()},
+        )
+    import secrets as _s
+    from evk.auth import hash_access_key
+    salt = _s.token_hex(8)
+    repos.users.patch(user.id, {
+        "access_key_salt": salt,
+        "access_key_hash": hash_access_key(password, salt=salt),
+        "is_active": True,
+        "activation_token": None,
+        "activation_token_expires": None,
+    })
+    if user.student_id:
+        repos.students.patch(user.student_id, {
+            "career_interests": career_interests,
+            "opportunity_types_sought": opportunity_types,
+            "notification_frequency": notification_frequency,
+            "opted_in": True,
+        })
+    return _redirect(request, "landing")
+
+
+@router.get("/profile", response_class=HTMLResponse, name="student_profile_page")
+def student_profile_page(
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    if current_user is None:
+        return _redirect(request, "login_page")
+    student = repos.students.get(current_user.student_id) if current_user.student_id else None
+    return templates.TemplateResponse(
+        request,
+        "student_profile.html",
+        {"request": request, "current_user": current_user, "student": student,
+         "wiring": describe_wiring(), "flash": None},
+    )
+
+
+@router.post("/profile", name="student_profile_save")
+def student_profile_save(
+    request: Request,
+    career_interests: list[str] = Form(default=[]),
+    opportunity_types: list[str] = Form(default=[]),
+    notification_frequency: str = Form("weekly"),
+    bio: str = Form(""),
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    if current_user is None or current_user.student_id is None:
+        return _redirect(request, "login_page")
+    repos.students.patch(current_user.student_id, {
+        "career_interests": career_interests,
+        "opportunity_types_sought": opportunity_types,
+        "notification_frequency": notification_frequency,
+        "bio": bio.strip(),
+    })
+    return _redirect(request, "student_dashboard")
 
 
 __all__ = [

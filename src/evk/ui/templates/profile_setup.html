@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}EVkids · Set Up Your Profile{% endblock %}
+{% block content %}
+
+<section class="max-w-2xl mx-auto mt-10">
+  <div class="rounded-[2.5rem] border border-slate-100 bg-white/80 backdrop-blur-xl p-10 shadow-2xl shadow-brand-100/40 relative overflow-hidden">
+    <div class="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-brand-200/30 blur-[80px] pointer-events-none"></div>
+    <div class="absolute -bottom-32 -right-32 h-64 w-64 rounded-full bg-amber-200/30 blur-[80px] pointer-events-none"></div>
+
+    <div class="relative z-10">
+      <div class="inline-flex items-center gap-2 rounded-full border border-brand-200/60 bg-brand-50/50 backdrop-blur px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-600 shadow-sm">
+        <span class="flex h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500"></span>
+        Profile Setup
+      </div>
+      <h1 class="mt-6 font-display text-4xl font-bold tracking-tight text-slate-900">
+        {% if valid %}Welcome to EVkids!{% else %}Link Expired{% endif %}
+      </h1>
+      <p class="mt-4 text-[15px] font-medium leading-relaxed text-slate-500">
+        {% if valid %}
+        Set your password and tell us a bit about yourself so we can find the best opportunities for you.
+        {% else %}
+        This setup link is no longer valid. Please contact an admin to send you a new one.
+        {% endif %}
+      </p>
+
+      {% if flash %}
+      <div class="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800 shadow-sm">{{ flash }}</div>
+      {% endif %}
+
+      {% if valid %}
+      <form method="post" action="{{ request.url_for('profile_setup_submit') }}" class="mt-8 space-y-6">
+        <input type="hidden" name="email" value="{{ email }}" />
+        <input type="hidden" name="token" value="{{ token }}" />
+
+        {# Password #}
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4">
+          <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Set your password</div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Password <span class="text-slate-400">(min 8 characters)</span></label>
+            <input type="password" name="password" required minlength="8"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 shadow-sm"/>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Confirm password</label>
+            <input type="password" name="confirm_password" required minlength="8"
+              class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 shadow-sm"/>
+          </div>
+        </div>
+
+        {# Career interests #}
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+          <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-3">Career interests <span class="normal-case font-normal text-slate-400">(select all that apply)</span></div>
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {% for interest in ['Healthcare', 'Technology', 'Trades', 'Arts', 'Business', 'Social Work', 'Education', 'STEM', 'Law', 'Community Service'] %}
+            <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 cursor-pointer hover:border-brand-300 hover:text-brand-700 transition has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+              <input type="checkbox" name="career_interests" value="{{ interest.lower() }}"
+                class="accent-brand-500 rounded"/>
+              {{ interest }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Opportunity types #}
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+          <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-3">Types of opportunities sought</div>
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {% for otype in ['Internship', 'Summer Job', 'Scholarship', 'College Support', 'Job Training', 'Career Fair', 'Fellowship'] %}
+            <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 cursor-pointer hover:border-brand-300 hover:text-brand-700 transition has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+              <input type="checkbox" name="opportunity_types" value="{{ otype.lower() }}"
+                class="accent-brand-500 rounded"/>
+              {{ otype }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Notification frequency #}
+        <div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+          <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-3">How often would you like to hear from us?</div>
+          <div class="flex flex-wrap gap-3">
+            {% for freq, label in [('weekly', 'Weekly'), ('biweekly', 'Bi-weekly'), ('monthly', 'Monthly')] %}
+            <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 cursor-pointer hover:border-brand-300 hover:text-brand-700 transition has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800 font-medium">
+              <input type="radio" name="notification_frequency" value="{{ freq }}"
+                {% if freq == 'weekly' %}checked{% endif %}
+                class="accent-brand-500"/>
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <button type="submit"
+          class="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-4 text-[15px] font-bold text-white shadow-md transition-all duration-200 hover:shadow-lg hover:from-brand-600 hover:to-brand-700 active:scale-[0.98]">
+          Complete setup &rarr;
+        </button>
+      </form>
+      {% else %}
+      <div class="mt-8 text-center">
+        <a href="{{ request.url_for('landing') }}"
+          class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition">
+          Return to homepage
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% endblock %}

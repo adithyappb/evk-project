@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     # ---- Dedup -----------------------------------------------------------
     dedup_deadline_window_days: int = 30  # pre-filter before any fuzzy match
 
+    # ---- Scheduler -------------------------------------------------------
+    auto_poll: bool = False           # set True in .env to start scheduler with server
+    poll_interval_minutes: int = 30   # how often to poll Gmail
+
     @computed_field  # type: ignore[misc]
     @property
     def reminder_days_before(self) -> list[int]:

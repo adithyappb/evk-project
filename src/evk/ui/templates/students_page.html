@@ -22,7 +22,24 @@
   </div>
 </section>
 
-<div class="mt-6">
+{# CSV upload #}
+<div class="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+  <h2 class="text-base font-semibold tracking-tight text-slate-950">Import Students via CSV</h2>
+  <p class="mt-1 text-sm text-slate-500">Upload a CSV with columns: <code class="font-mono text-slate-700">name, email, school, level</code>. Existing emails are skipped.</p>
+  <form method="post" action="{{ request.url_for('students_import') }}" enctype="multipart/form-data" class="mt-4 flex items-end gap-3 flex-wrap">
+    <div class="flex-1 min-w-[200px]">
+      <label class="block text-[11px] font-semibold text-slate-600 mb-1">CSV file</label>
+      <input type="file" name="file" accept=".csv,text/csv" required
+        class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5"/>
+    </div>
+    <button type="submit"
+      class="rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all duration-200 hover:shadow-lg hover:from-brand-600 hover:to-brand-700 active:scale-[0.98] shrink-0">
+      Import
+    </button>
+  </form>
+</div>
+
+<div class="mt-4">
   {% include "_students_panel.html" %}
 </div>
 

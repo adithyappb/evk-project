@@ -142,6 +142,18 @@ class GeminiClient:
             )
             raise GeminiError(f"Gemini returned invalid JSON for {schema.__name__}: {exc}") from exc
 
+    def generate_embedding(self, text: str) -> list[float]:
+        """Generate a text embedding using the Gemini embeddings API."""
+        try:
+            response = self._client.models.embed_content(
+                model="models/text-embedding-004",
+                contents=text,
+            )
+            return list(response.embeddings[0].values)
+        except Exception as exc:
+            logger.bind(error=str(exc)).warning("gemini.embedding_failed")
+            return []
+
     def healthcheck(self) -> bool:
         """Cheap liveness ping — ~10 tokens, used by /healthz."""
         try:

@@ -88,6 +88,35 @@
         {% endfor %}
       </div>
       {% endif %}
+
+      {% if status == 'rejected' %}
+      <form class="mt-4 space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4"
+            hx-post="/ui/drafts/{{ d.id }}/save-edit?status_filter={{ active_status if active_status is defined else 'pending_approval' }}"
+            hx-target="#drafts"
+            hx-swap="outerHTML">
+        <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700 mb-2">Edit before sending</div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">Subject</label>
+          <input type="text" name="subject" value="{{ d.subject }}"
+            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">Body</label>
+          <textarea name="body_text" rows="6"
+            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100 resize-none">{{ d.body_text }}</textarea>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button type="submit" name="action" value="approve"
+            class="rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:from-emerald-600 hover:to-emerald-700">
+            Approve &amp; Send
+          </button>
+          <button type="submit" name="action" value="pending"
+            class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50">
+            Save as Pending
+          </button>
+        </div>
+      </form>
+      {% endif %}
     </div>
 
     <div class="shrink-0 flex w-[150px] flex-col items-end gap-2">
@@ -124,7 +153,7 @@
         </div>
       </div>
       {% elif status == 'rejected' %}
-      <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">editing</div>
+      {# Edit form is shown inline in the left column #}
       {% elif status == 'failed' %}
       <div class="text-right">
         <div class="text-xs font-medium text-rose-500">Failed</div>
