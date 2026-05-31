@@ -11,7 +11,7 @@ from evk.agents.personalizer import PersonalizerAgent
 from evk.config import get_settings
 from evk.dedup import find_duplicate
 from evk.email_sanitizer import strip_footers
-from evk.factory import get_inkbox, get_repos
+from evk.factory import get_gemini, get_inkbox, get_repos
 from evk.firestore_repo import Repos
 from evk.inkbox_client import InboundMessage, InkboxClient
 from evk.logging import logger
@@ -134,9 +134,19 @@ class IngestionAgent:
         """
         # Load once outside the loop — this is N reads, not N².
         existing_catalogue = self._repos.opportunities.list_all()
+        # Check whether the Gemini client supports embeddings (not a stub).
+        gemini = get_gemini()
+        _has_embeddings = hasattr(gemini, "generate_embedding")
         persisted: list[Opportunity] = []
         for extracted in extracted_list:
             opp = to_opportunity(extracted, source_raw_email=source)
+            # Compute embedding before storing when Gemini is available.
+            if _has_embeddings:
+                try:
+                    embedding_text = f"{opp.title} {opp.summary} {opp.organization}"
+                    opp.embedding = gemini.generate_embedding(embedding_text)
+                except Exception:
+                    logger.exception("ingestion.embedding_failed")
             stored, created = self._repos.opportunities.create_if_absent(opp)
             if created:
                 dup = find_duplicate(opp, existing_catalogue)

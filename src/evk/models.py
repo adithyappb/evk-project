@@ -239,6 +239,7 @@ class Opportunity(FirestoreDoc):
     # sent to students until an admin clears them.
     needs_review: bool = False
     review_reason: str = ""
+    embedding: list[float] = Field(default_factory=list)
 
 
 class RawEmailStatus(StrEnum):
@@ -318,6 +319,8 @@ class AppUser(FirestoreDoc):
     access_key_salt: str
     access_key_hash: str
     last_login_at: datetime | None = None
+    activation_token: str | None = None
+    activation_token_expires: datetime | None = None
 
 
 class LoginChallenge(FirestoreDoc):

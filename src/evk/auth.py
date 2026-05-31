@@ -341,6 +341,31 @@ class AuthService:
         )
         return code_hint
 
+    def send_welcome_email(self, *, student_email: str, setup_url: str) -> None:
+        """Send a welcome/activation email with a profile setup link."""
+        msg = EmailMessage()
+        msg["Subject"] = "Welcome to EVkids — set up your profile"
+        msg["From"] = self.settings.effective_smtp_sender
+        msg["To"] = student_email
+        msg.set_content(
+            f"Welcome to EVkids!\n\n"
+            f"Click the link below to set your password and complete your profile:\n\n"
+            f"{setup_url}\n\n"
+            f"This link expires in 7 days.\n\n"
+            f"— The EVkids Team"
+        )
+        if not self.settings.effective_smtp_username:
+            logger.bind(email=student_email, url=setup_url).info("auth.welcome_terminal")
+            print(f"[EVkids welcome] Setup link for {student_email}: {setup_url}", flush=True)
+            return
+        with smtplib.SMTP(self.settings.effective_smtp_host, self.settings.effective_smtp_port, timeout=10) as client:
+            client.ehlo()
+            client.starttls()
+            client.ehlo()
+            client.login(self.settings.effective_smtp_username, self.settings.effective_smtp_password)
+            client.send_message(msg)
+        logger.bind(email=student_email).info("auth.welcome_sent")
+
     def complete_reset(self, *, email: str, code: str, new_access_key: str) -> "AppUser":
         """Verify reset code and replace access key.
 

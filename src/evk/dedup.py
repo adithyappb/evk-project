@@ -1,4 +1,4 @@
-"""Opportunity deduplication — cheap pre-filter + Jaccard similarity.
+"""Opportunity deduplication — cheap pre-filter + Jaccard + cosine similarity.
 
 Strategy (per production mandate):
 
@@ -10,12 +10,9 @@ Strategy (per production mandate):
    down to O(N x k) where k ~= a handful.
 3. **Fuzzy** — within the candidate set, compute Jaccard similarity on the
    title's alphanumeric token set. ≥ 0.7 is treated as a near-duplicate.
-
-This intentionally does **not** call the Gemini embeddings API — a full
-embedding service would be justified only once we're ingesting thousands of
-emails/day and even then, the pre-filter here trims the embedding-compare set
-by ~98 %. The module is designed so a future `embed_similarity()` can slot in
-behind the same interface.
+4. **Semantic** — when both candidate and existing have embeddings stored,
+   also check cosine similarity ≥ 0.92 to catch near-duplicates with
+   different titles (e.g. same event from two newsletters).
 """
 
 from __future__ import annotations
@@ -67,6 +64,10 @@ def find_duplicate(
         sim = _jaccard(cand_tokens, _tokens(other.title))
         if sim >= threshold and (best is None or sim > best.similarity):
             best = DuplicateMatch(existing=other, similarity=sim)
+        # Semantic check: cosine similarity on embeddings when available.
+        cos = _cosine(candidate.embedding, other.embedding)
+        if cos >= 0.92 and (best is None or cos > best.similarity):
+            best = DuplicateMatch(existing=other, similarity=cos)
     return best
 
 
@@ -100,6 +101,18 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
         return 0.0
     union = a | b
     return len(inter) / len(union)
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Cosine similarity between two embedding vectors."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    mag_a = sum(x * x for x in a) ** 0.5
+    mag_b = sum(x * x for x in b) ** 0.5
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    return dot / (mag_a * mag_b)
 
 
 __all__ = ["DuplicateMatch", "find_duplicate"]
