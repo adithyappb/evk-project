@@ -61,9 +61,9 @@ async def _lifespan(_app: FastAPI):
 
     if settings.auto_poll:
         import threading
+        import time
 
         def _poll_loop() -> None:
-            import time
             while True:
                 try:
                     repos = get_repos()
@@ -75,8 +75,22 @@ async def _lifespan(_app: FastAPI):
                     logger.exception("scheduler.poll_failed")
                 time.sleep(settings.poll_interval_minutes * 60)
 
-        t = threading.Thread(target=_poll_loop, daemon=True, name="evk-scheduler")
-        t.start()
+        def _reminder_loop() -> None:
+            # Run reminders once per day (checked every hour; agent is idempotent).
+            while True:
+                time.sleep(3600)
+                try:
+                    from evk.agents.reminder import ReminderAgent
+                    repos = get_repos()
+                    inkbox = get_inkbox()
+                    sent = ReminderAgent(repos=repos, inkbox=inkbox).send_due()
+                    if sent:
+                        logger.bind(sent=sent).info("scheduler.reminders_sent")
+                except Exception:
+                    logger.exception("scheduler.reminder_failed")
+
+        threading.Thread(target=_poll_loop, daemon=True, name="evk-poll").start()
+        threading.Thread(target=_reminder_loop, daemon=True, name="evk-remind").start()
         logger.bind(interval_minutes=settings.poll_interval_minutes).info("scheduler.started")
 
     yield
