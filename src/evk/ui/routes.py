@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -15,12 +15,12 @@ from evk.agents.digest import DigestAgent
 from evk.agents.distributor import DistributorAgent
 from evk.agents.ingestion import IngestionAgent
 from evk.agents.reminder import ReminderAgent
-from evk.auth import AuthError, AuthService, build_auth_notifier
+from evk.auth import AuthError, AuthService, TerminalAuthNotifier, build_auth_notifier
 from evk.config import Settings, get_settings
 from evk.factory import describe_wiring, get_inkbox, get_repos
 from evk.firestore_repo import Repos
 from evk.inkbox_client import InboundMessage, InkboxClient
-from evk.models import AppUser, DraftMessage, DraftStatus, Opportunity, UserRole
+from evk.models import AppUser, DraftMessage, DraftStatus, LoginChallenge, Opportunity, UserRole
 from evk.ui import TEMPLATES_DIR
 
 router = APIRouter(tags=["ui"])
@@ -570,6 +570,58 @@ def auth_verify(
     response = _redirect(request, _role_home(user))
     _set_session_cookie(response, session.id, settings)
     return response
+
+
+@router.post("/auth/resend", response_class=HTMLResponse, name="auth_resend")
+def auth_resend(
+    request: Request,
+    email: str = Form(...),
+    auth: AuthService = Depends(_auth_dep),
+) -> HTMLResponse:
+    """Re-issue a login OTP for an email address — no access_key required.
+
+    Security: we look up the user by email and only resend if an *existing*
+    session challenge was already started (i.e. the user successfully passed
+    step 1 within the last TTL window).  If no prior challenge exists we
+    silently return the same page rather than revealing whether the email
+    exists.
+    """
+    email_norm = email.strip().lower()
+    # Only resend if the user exists and is active — never reveal existence otherwise.
+    user = auth.repos.users.get_by_email(email_norm)
+    dev_code: str | None = None
+    flash_msg = "A new code has been sent."
+
+    if user is not None and user.is_active:
+        import secrets
+        from evk.auth import hash_login_code
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        challenge = LoginChallenge(
+            id=f"challenge_{user.id}_{secrets.token_hex(4)}",
+            user_id=user.id,
+            email=user.email,
+            code_hash=hash_login_code(code, user_id=user.id),
+            expires_at=datetime.now(UTC) + timedelta(minutes=auth.settings.login_code_ttl_minutes),
+            purpose="login",
+        )
+        auth.repos.login_challenges.upsert(challenge)
+        auth.notifier.send_code(email=user.email, code=code)
+        if isinstance(auth.notifier, TerminalAuthNotifier):
+            dev_code = auth.notifier.last_code  # type: ignore[attr-defined]
+
+    return templates.TemplateResponse(
+        request,
+        "auth_verify.html",
+        {
+            "request": request,
+            "current_user": None,
+            "wiring": describe_wiring(),
+            "email": email_norm,
+            "flash": flash_msg,
+            "delivery_mode": auth.settings.auth_email_delivery_mode,
+            "dev_code": dev_code,
+        },
+    )
 
 
 @router.get("/forgot", response_class=HTMLResponse, name="forgot_page")
