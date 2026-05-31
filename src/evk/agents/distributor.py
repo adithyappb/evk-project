@@ -77,15 +77,48 @@ class DistributorAgent:
         return sent
 
     def send_one(self, draft: DraftMessage) -> DraftMessage:
-        """Send a single draft. Raises on failure; updates Firestore regardless."""
+        """Send a single draft via email, WhatsApp, or SMS depending on student preference."""
         if draft.status is not DraftStatus.APPROVED:
             raise ValueError(f"Draft {draft.id} is not approved (status={draft.status.value})")
-        message_id = self._inkbox.send(
-            to=[draft.to_email],
-            subject=draft.subject,
-            body_text=draft.body_text,
-            body_html=draft.body_html or None,
-        )
+
+        # Check student notification preference
+        student = None
+        if draft.student_id:
+            student = self._repos.students.get(draft.student_id)
+
+        method = getattr(student, "preferred_notification_method", "email") if student else "email"
+        phone = getattr(student, "phone_number", None) if student else None
+
+        message_id: str = ""
+
+        if method in ("whatsapp", "sms") and phone:
+            try:
+                from evk.twilio_client import TwilioClient
+                client = TwilioClient()
+                body = f"{draft.subject}\n\n{draft.body_text}"
+                if method == "whatsapp":
+                    message_id = client.send_whatsapp(to=phone, body=body)
+                else:
+                    message_id = client.send_sms(to=phone, body=draft.body_text[:160])
+                logger.bind(draft_id=draft.id, method=method, to=phone).info("distributor.sent_twilio")
+            except Exception as exc:
+                # Fall back to email if Twilio fails or isn't configured
+                logger.bind(draft_id=draft.id, method=method, error=str(exc)).warning(
+                    "distributor.twilio_failed_fallback_email"
+                )
+                message_id = self._inkbox.send(
+                    to=[draft.to_email],
+                    subject=draft.subject,
+                    body_text=draft.body_text,
+                    body_html=draft.body_html or None,
+                )
+        else:
+            message_id = self._inkbox.send(
+                to=[draft.to_email],
+                subject=draft.subject,
+                body_text=draft.body_text,
+                body_html=draft.body_html or None,
+            )
         now = datetime.now(UTC)
         self._repos.drafts.patch(
             draft.id,

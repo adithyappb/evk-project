@@ -822,6 +822,121 @@ def drafts_page(
     )
 
 
+@router.get("/admin/kpi", response_class=HTMLResponse, name="admin_kpi")
+def admin_kpi(
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    settings: Settings = Depends(_settings_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    """KPI dashboard — operational stats + editable outcome tracker."""
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+
+    import json as _json, statistics as _stats_mod
+    from pathlib import Path as _Path
+
+    # ── Operational metrics ──────────────────────────────────────────────────
+    all_drafts   = repos.drafts.list_all()
+    all_opps     = repos.opportunities.list_all()
+    all_emails   = repos.raw_emails.list_all()
+
+    active_opps  = [o for o in all_opps if not o.needs_review and not o.is_duplicate]
+    sent_drafts  = [d for d in all_drafts if d.status == DraftStatus.SENT]
+    approved     = [d for d in all_drafts if d.status == DraftStatus.APPROVED]
+
+    matched_students = len({d.student_id for d in sent_drafts})
+
+    review_hours_list = [
+        (d.sent_at - d.created_at).total_seconds() / 3600
+        for d in sent_drafts
+        if d.sent_at and d.created_at
+    ]
+    avg_review_hours = round(_stats_mod.mean(review_hours_list), 1) if review_hours_list else None
+
+    ops = {
+        "emails_ingested":    len(all_emails),
+        "opps_classified":    len(active_opps),
+        "opps_in_review":     sum(1 for o in all_opps if o.needs_review),
+        "drafts_generated":   len(all_drafts),
+        "drafts_approved":    len(approved),
+        "emails_sent":        len(sent_drafts),
+        "students_matched":   matched_students,
+        "avg_review_hours":   avg_review_hours,
+    }
+
+    # ── Outcome tracking (file-backed) ───────────────────────────────────────
+    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
+    try:
+        outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
+    except Exception:
+        outcomes = []
+
+    return templates.TemplateResponse(
+        request,
+        "admin_kpi.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "ops": ops,
+            "outcomes": outcomes,
+        },
+    )
+
+
+@router.post("/admin/kpi/outcome", name="admin_kpi_outcome_add")
+def admin_kpi_outcome_add(
+    request: Request,
+    period: str = Form(...),
+    applications: str = Form(""),
+    interviews: str = Form(""),
+    scholarships: str = Form(""),
+    continuation: str = Form(""),
+    notes: str = Form(""),
+    settings: Settings = Depends(_settings_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    import json as _json
+    from pathlib import Path as _Path
+    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
+    outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
+    outcomes.append({
+        "period": period.strip(),
+        "applications": applications.strip(),
+        "interviews": interviews.strip(),
+        "scholarships": scholarships.strip(),
+        "continuation": continuation.strip(),
+        "notes": notes.strip(),
+    })
+    kpi_file.write_text(_json.dumps(outcomes, indent=2))
+    return _redirect(request, "admin_kpi")
+
+
+@router.post("/admin/kpi/outcome/{idx}/delete", name="admin_kpi_outcome_delete")
+def admin_kpi_outcome_delete(
+    idx: int,
+    request: Request,
+    settings: Settings = Depends(_settings_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    guard = _staff_redirect(request, current_user)  # admin-only for delete
+    if guard is not None:
+        return guard
+    import json as _json
+    from pathlib import Path as _Path
+    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
+    outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
+    if 0 <= idx < len(outcomes):
+        outcomes.pop(idx)
+        kpi_file.write_text(_json.dumps(outcomes, indent=2))
+    return _redirect(request, "admin_kpi")
+
+
 @router.get("/admin/test-logins", response_class=HTMLResponse, name="admin_test_logins")
 def admin_test_logins(
     request: Request,
@@ -882,6 +997,21 @@ def admin_test_login_issue(
         repos.login_challenges.upsert(challenge)
         code_issued = code
         print(f"[EVkids test-login] {user.email}: {code}", flush=True)
+    if code_issued:
+        # Code issued — jump directly to the verify page with it pre-shown.
+        return templates.TemplateResponse(
+            request,
+            "auth_verify.html",
+            {
+                "request": request,
+                "current_user": None,
+                "wiring": describe_wiring(),
+                "email": email,
+                "flash": None,
+                "delivery_mode": "terminal",
+                "dev_code": code_issued,
+            },
+        )
     return templates.TemplateResponse(
         request,
         "admin_test_login.html",
@@ -1564,6 +1694,8 @@ def student_profile_save(
     career_interests: list[str] = Form(default=[]),
     opportunity_types: list[str] = Form(default=[]),
     notification_frequency: str = Form("weekly"),
+    preferred_notification_method: str = Form("email"),
+    phone: str = Form(""),
     bio: str = Form(""),
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
@@ -1574,9 +1706,31 @@ def student_profile_save(
         "career_interests": career_interests,
         "opportunity_types_sought": opportunity_types,
         "notification_frequency": notification_frequency,
+        "preferred_notification_method": preferred_notification_method,
+        "phone": phone.strip(),
         "bio": bio.strip(),
     })
     return _redirect(request, "student_dashboard")
+
+
+@router.post("/ui/scrape", response_class=HTMLResponse)
+def ui_scrape(
+    request: Request,
+    source: str = Form(...),
+    repos: Repos = Depends(_repos_dep),
+    inkbox: InkboxClient = Depends(_inkbox_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    user = _staff_required(current_user)
+    from evk.agents.scraper import WebScraperAgent, SCRAPER_SOURCES
+    if source not in SCRAPER_SOURCES:
+        raise HTTPException(status_code=400, detail=f"Unknown source: {source!r}")
+    try:
+        count = WebScraperAgent(repos=repos, inkbox=inkbox).scrape(source)
+        flash = f"Scraped {SCRAPER_SOURCES[source]['name']}: {count} opportunit{'y' if count == 1 else 'ies'} queued for review."
+    except Exception as exc:
+        flash = f"Scrape failed for {source}: {exc}"
+    return _render_stats(request, repos, user, flash=flash)
 
 
 __all__ = [

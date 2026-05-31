@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}EVkids · KPI Dashboard{% endblock %}
+{% block content %}
+
+<section class="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 px-6 py-7 shadow-sm">
+  <a href="{{ request.url_for('admin_dashboard') if current_user.role.value == 'admin' else request.url_for('ngo_dashboard') }}"
+     class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300">
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Back to dashboard
+  </a>
+  <div class="mt-5 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+    Impact metrics
+  </div>
+  <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-950">KPI Dashboard</h1>
+  <p class="mt-2 text-sm leading-6 text-slate-500 max-w-2xl">
+    Operational stats are live — updated on every page load. Outcome data is entered manually by programme staff each month.
+  </p>
+</section>
+
+{# ── Operational stats ── #}
+<section class="mt-6">
+  <h2 class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 mb-3">Pipeline · all time</h2>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Emails ingested</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{{ ops.emails_ingested }}</div>
+      <div class="mt-1 text-xs text-slate-400">newsletters processed</div>
+    </div>
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Opportunities live</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{{ ops.opps_classified }}</div>
+      <div class="mt-1 text-xs text-{% if ops.opps_in_review > 0 %}amber{% else %}slate{% endif %}-400">
+        + {{ ops.opps_in_review }} pending review
+      </div>
+    </div>
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Drafts generated</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{{ ops.drafts_generated }}</div>
+      <div class="mt-1 text-xs text-slate-400">personalised emails drafted</div>
+    </div>
+
+    <div class="rounded-[1.6rem] border border-emerald-100 bg-emerald-50/60 p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">Emails sent</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-emerald-700">{{ ops.emails_sent }}</div>
+      <div class="mt-1 text-xs text-emerald-600/70">approved &amp; delivered</div>
+    </div>
+
+  </div>
+
+  <div class="mt-3 grid gap-3 sm:grid-cols-3">
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Students matched</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{{ ops.students_matched }}</div>
+      <div class="mt-1 text-xs text-slate-400">received at least one opportunity</div>
+    </div>
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Drafts approved</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">{{ ops.drafts_approved }}</div>
+      <div class="mt-1 text-xs text-slate-400">queued to send</div>
+    </div>
+
+    <div class="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Avg review time</div>
+      <div class="mt-3 text-3xl font-semibold tabular-nums text-slate-950">
+        {% if ops.avg_review_hours is not none %}{{ ops.avg_review_hours }}h{% else %}—{% endif %}
+      </div>
+      <div class="mt-1 text-xs text-slate-400">draft created → email sent</div>
+    </div>
+
+  </div>
+</section>
+
+{# ── Outcome tracking ── #}
+<section class="mt-8 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+    <div>
+      <h2 class="text-base font-semibold tracking-tight text-slate-950">Outcome tracking</h2>
+      <p class="mt-0.5 text-xs text-slate-500">
+        Filled in by programme staff. Add a row each month with whatever data is available — partial entries are fine.
+      </p>
+    </div>
+  </div>
+
+  {% if outcomes %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-slate-100 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+          <th class="pb-2 pr-4 whitespace-nowrap">Period</th>
+          <th class="pb-2 pr-4 whitespace-nowrap">Applications</th>
+          <th class="pb-2 pr-4 whitespace-nowrap">Interviews / offers</th>
+          <th class="pb-2 pr-4 whitespace-nowrap">Scholarships won</th>
+          <th class="pb-2 pr-4 whitespace-nowrap">College continuation</th>
+          <th class="pb-2 pr-4">Notes</th>
+          <th class="pb-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for row in outcomes %}{% set i = loop.index0 %}
+        <tr>
+          <td class="py-2.5 pr-4 font-medium text-slate-800 whitespace-nowrap">{{ row.period or '—' }}</td>
+          <td class="py-2.5 pr-4 tabular-nums text-slate-700">{{ row.applications or '—' }}</td>
+          <td class="py-2.5 pr-4 tabular-nums text-slate-700">{{ row.interviews or '—' }}</td>
+          <td class="py-2.5 pr-4 tabular-nums text-slate-700">{{ row.scholarships or '—' }}</td>
+          <td class="py-2.5 pr-4 tabular-nums text-slate-700">{{ row.continuation or '—' }}</td>
+          <td class="py-2.5 pr-4 text-slate-500 text-xs">{{ row.notes or '' }}</td>
+          <td class="py-2.5">
+            {% if current_user.role.value == 'admin' %}
+            <form method="POST" action="{{ request.url_for('admin_kpi_outcome_delete', idx=i) }}" class="inline">
+              <button type="submit" class="text-[11px] font-medium text-rose-500 hover:text-rose-700">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-400 italic mb-4">No outcomes recorded yet — add the first row below.</p>
+  {% endif %}
+
+  {# Add new row form #}
+  <form method="POST" action="{{ request.url_for('admin_kpi_outcome_add') }}"
+        class="mt-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+    <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-3">Add outcome row</div>
+    <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">Period</label>
+        <input type="text" name="period" placeholder="May 2026" required
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">Applications</label>
+        <input type="text" name="applications" placeholder="e.g. 4"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">Interviews / offers</label>
+        <input type="text" name="interviews" placeholder="e.g. 2"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">Scholarships won</label>
+        <input type="text" name="scholarships" placeholder="e.g. 1"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">College continuation</label>
+        <input type="text" name="continuation" placeholder="e.g. 3/4"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-slate-500 mb-1">Notes</label>
+        <input type="text" name="notes" placeholder="Optional"
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+    </div>
+    <button type="submit"
+      class="rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700">
+      Add row
+    </button>
+  </form>
+</section>
+
+{% endblock %}

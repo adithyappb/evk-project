@@ -59,6 +59,29 @@
       </div>
     </div>
 
+    {# Notification method #}
+    <div class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 class="text-base font-semibold tracking-tight text-slate-950">Notification Method</h2>
+      <p class="mt-1 text-sm text-slate-500">How would you like to receive opportunity alerts?</p>
+      <div class="mt-4 flex flex-wrap gap-3">
+        {% for method, label in [('email', 'Email'), ('whatsapp', 'WhatsApp')] %}
+        <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 cursor-pointer hover:border-brand-300 hover:text-brand-700 transition has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+          <input type="radio" name="preferred_notification_method" value="{{ method }}"
+            {% if student and student.preferred_notification_method == method %}checked
+            {% elif not student and method == 'email' %}checked{% endif %}
+            class="accent-brand-500" onchange="document.getElementById('whatsapp-field').classList.toggle('hidden', this.value !== 'whatsapp')"/>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+      <div id="whatsapp-field" class="{{ '' if student and student.preferred_notification_method == 'whatsapp' else 'hidden' }} mt-4">
+        <label class="block text-xs font-semibold text-slate-500 mb-1">WhatsApp phone number (E.164 format, e.g. +16175551234)</label>
+        <input type="tel" name="phone" value="{{ student.phone if student else '' }}"
+          placeholder="+16175551234"
+          class="w-full max-w-xs rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"/>
+      </div>
+    </div>
+
     {# Notification frequency #}
     <div class="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="text-base font-semibold tracking-tight text-slate-950">Notification Frequency</h2>

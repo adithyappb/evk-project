@@ -35,24 +35,6 @@ _DEFAULT_TEMPERATURE = 0.1
 _MAX_ATTEMPTS = 3
 
 
-def _strip_unsupported_schema_keys(obj: object) -> object:
-    """Recursively remove JSON-Schema keys unsupported by the Gemini Developer API.
-
-    The Gemini Developer API rejects ``additionalProperties``, ``$schema``, and
-    ``title`` at the top level, even though they are valid JSON Schema.  Pydantic's
-    ``.model_json_schema()`` emits them automatically, so we strip before sending.
-    """
-    _UNSUPPORTED = {"additionalProperties", "$schema", "title", "$defs"}
-    if isinstance(obj, dict):
-        return {
-            k: _strip_unsupported_schema_keys(v)
-            for k, v in obj.items()
-            if k not in _UNSUPPORTED
-        }
-    if isinstance(obj, list):
-        return [_strip_unsupported_schema_keys(item) for item in obj]
-    return obj
-
 
 class GeminiError(RuntimeError):
     """Raised when Gemini produces an unusable response (schema invalid / empty)."""
@@ -111,17 +93,15 @@ class GeminiClient:
         temperature: float = _DEFAULT_TEMPERATURE,
         max_output_tokens: int = 4096,
     ) -> T:
-        # Build a cleaned schema dict — the Gemini Developer API rejects
-        # additionalProperties, $schema, title, and $defs even though they are
-        # valid JSON Schema.  Pydantic emits them; we strip before sending.
-        raw_schema = schema.model_json_schema()
-        clean_schema = _strip_unsupported_schema_keys(raw_schema)
+        # Pass the Pydantic class directly — the google-genai SDK handles
+        # schema serialization internally and avoids the $ref/$defs mismatch
+        # that caused 400 errors when we stripped $defs from the dict ourselves.
         config = genai_types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
             response_mime_type="application/json",
-            response_schema=clean_schema,
+            response_schema=schema,
         )
         raw = _call_with_retry(
             self._client,

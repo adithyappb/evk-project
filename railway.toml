@@ -1,0 +1,13 @@
+# Railway deployment config — https://docs.railway.app/reference/config-as-code
+# In Railway UI: Settings → Source → Root Directory = evk-project
+# (Railway will then find this file and pyproject.toml automatically)
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "uvicorn evk.api:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     auto_poll: bool = False             # set True in .env to start scheduler with server
     poll_interval_minutes: int = 1440  # how often to poll Gmail — default daily
 
+    # ---- Twilio (optional — WhatsApp + SMS delivery) ----------------------
+    # Run `uv add twilio` to install the SDK if you want this feature.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_from_number: str = ""          # E.164, e.g. +15551234567 for SMS
+    twilio_whatsapp_from: str = ""        # e.g. whatsapp:+14155238886 (sandbox)
+
     @computed_field  # type: ignore[misc]
     @property
     def reminder_days_before(self) -> list[int]:

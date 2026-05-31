@@ -204,6 +204,7 @@ class Student(FirestoreDoc):
     location: str = ""
     bio: str = ""
     opted_in: bool = True
+    phone: str = ""
     preferred_notification_method: str = "email"
     notification_frequency: str = "weekly"
 

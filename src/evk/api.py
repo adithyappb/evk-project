@@ -83,7 +83,7 @@ async def _lifespan(_app: FastAPI):
                     from evk.agents.reminder import ReminderAgent
                     repos = get_repos()
                     inkbox = get_inkbox()
-                    sent = ReminderAgent(repos=repos, inkbox=inkbox).send_due()
+                    sent = ReminderAgent(repos=repos, inkbox=inkbox).run()
                     if sent:
                         logger.bind(sent=sent).info("scheduler.reminders_sent")
                 except Exception:
