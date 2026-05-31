@@ -822,6 +822,82 @@ def drafts_page(
     )
 
 
+@router.get("/admin/test-logins", response_class=HTMLResponse, name="admin_test_logins")
+def admin_test_logins(
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    """Pilot-only tool: issue login codes for accounts with placeholder email addresses."""
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    users = sorted(repos.users.list_all(), key=lambda u: (u.role.value, u.email))
+    return templates.TemplateResponse(
+        request,
+        "admin_test_login.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "users": users,
+            "code_issued": None,
+            "code_email": None,
+            "flash": None,
+            "ttl_minutes": get_settings().login_code_ttl_minutes,
+        },
+    )
+
+
+@router.post("/admin/test-logins/issue", name="admin_test_login_issue")
+def admin_test_login_issue(
+    request: Request,
+    email: str = Form(...),
+    repos: Repos = Depends(_repos_dep),
+    auth: AuthService = Depends(_auth_dep),
+    settings: Settings = Depends(_settings_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    guard = _staff_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    import secrets as _sec
+    from evk.auth import hash_login_code
+    users = sorted(repos.users.list_all(), key=lambda u: (u.role.value, u.email))
+    user = repos.users.get_by_email(email.strip().lower())
+    code_issued = None
+    flash = None
+    if user is None:
+        flash = f"No account found for {email}"
+    else:
+        code = f"{_sec.randbelow(1_000_000):06d}"
+        challenge = LoginChallenge(
+            id=f"challenge_{user.id}_{_sec.token_hex(4)}",
+            user_id=user.id,
+            email=user.email,
+            code_hash=hash_login_code(code, user_id=user.id),
+            expires_at=datetime.now(UTC) + timedelta(minutes=settings.login_code_ttl_minutes),
+            purpose="login",
+        )
+        repos.login_challenges.upsert(challenge)
+        code_issued = code
+        print(f"[EVkids test-login] {user.email}: {code}", flush=True)
+    return templates.TemplateResponse(
+        request,
+        "admin_test_login.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "users": users,
+            "code_issued": code_issued,
+            "code_email": email,
+            "flash": flash,
+            "ttl_minutes": settings.login_code_ttl_minutes,
+        },
+    )
+
+
 @router.get("/students", response_class=HTMLResponse, name="students_page")
 @router.get("/ui/pages/students", response_class=HTMLResponse, include_in_schema=False)
 def students_page(

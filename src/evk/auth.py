@@ -101,8 +101,14 @@ class TerminalAuthNotifier(AuthNotifier):
 class SmtpAuthNotifier(AuthNotifier):
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        # Always store the last code so admin tools can surface it for test accounts.
+        self.last_code: str | None = None
 
     def send_code(self, *, email: str, code: str) -> None:
+        self.last_code = code
+        # Always print to terminal so test/pilot accounts with fake email addresses
+        # can still be used — admin checks the server output for the OTP.
+        print(f"[EVkids OTP] {email}: {code}", flush=True)
         msg = EmailMessage()
         msg["Subject"] = "EVkids verification code"
         msg["From"] = self._settings.effective_smtp_sender
@@ -248,12 +254,19 @@ class AuthService:
         self.repos.login_challenges.upsert(challenge)
         self.notifier.send_code(email=user.email, code=code)
         logger.bind(user_id=user.id).info("auth.challenge_created")
-        # In terminal/dev mode expose the plain code so the browser can show it
-        code_hint = (
-            self.notifier.last_code  # type: ignore[attr-defined]
-            if isinstance(self.notifier, TerminalAuthNotifier)
-            else None
-        )
+        # Show code in the browser banner for:
+        #   - TerminalAuthNotifier (no Gmail configured — always show)
+        #   - SmtpAuthNotifier + placeholder email domain (evkids.org, example.edu,
+        #     example.com) — Gmail can't deliver to these, so surface the code in-browser
+        code_hint: str | None = None
+        if hasattr(self.notifier, "last_code") and self.notifier.last_code:  # type: ignore[union-attr]
+            is_terminal = isinstance(self.notifier, TerminalAuthNotifier)
+            is_placeholder_domain = any(
+                user.email.endswith(d)
+                for d in ("@evkids.org", "@example.edu", "@example.com", "@test.com", ".local")
+            )
+            if is_terminal or is_placeholder_domain:
+                code_hint = self.notifier.last_code  # type: ignore[union-attr]
         return user, code_hint
 
     def verify_login(self, *, email: str, code: str) -> tuple[AppUser, Session]:
@@ -334,11 +347,15 @@ class AuthService:
         self.repos.login_challenges.upsert(challenge)
         self.notifier.send_code(email=user.email, code=code)
         logger.bind(user_id=user.id).info("auth.reset_challenge_created")
-        code_hint = (
-            self.notifier.last_code  # type: ignore[attr-defined]
-            if isinstance(self.notifier, TerminalAuthNotifier)
-            else None
-        )
+        code_hint: str | None = None
+        if hasattr(self.notifier, "last_code") and self.notifier.last_code:  # type: ignore[union-attr]
+            is_terminal = isinstance(self.notifier, TerminalAuthNotifier)
+            is_placeholder_domain = any(
+                user.email.endswith(d)
+                for d in ("@evkids.org", "@example.edu", "@example.com", "@test.com", ".local")
+            )
+            if is_terminal or is_placeholder_domain:
+                code_hint = self.notifier.last_code  # type: ignore[union-attr]
         return code_hint
 
     def send_welcome_email(self, *, student_email: str, setup_url: str) -> None:
