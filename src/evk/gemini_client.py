@@ -160,9 +160,14 @@ def _call_with_retry(
     try:
         response = client.models.generate_content(model=model, contents=contents, config=config)
     except Exception as exc:
-        # All SDK exceptions are treated as transient — quotas, 5xx, timeouts.
+        err_str = str(exc)
+        # 429 / quota errors are NOT transient — retrying burns more quota.
+        # Re-raise directly so tenacity doesn't waste the daily allowance.
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+            logger.bind(error=type(exc).__name__).error("gemini.quota_exhausted")
+            raise GeminiError(f"Gemini quota exhausted: {err_str[:200]}") from exc
         logger.bind(error=type(exc).__name__).warning("gemini.call_failed_retrying")
-        raise _TransientGeminiError(str(exc)) from exc
+        raise _TransientGeminiError(err_str) from exc
     text = getattr(response, "text", None)
     if not text:
         raise _TransientGeminiError("empty response")
