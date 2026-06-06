@@ -34,3 +34,8 @@ service-account*.json
 
 # --- Runtime data (local-mode JSON store + send logs) ---
 data/
+
+# --- Backup copies (macOS Finder duplicates) ---
+*\ copy/
+*\ copy.*
+.claude/worktrees/
