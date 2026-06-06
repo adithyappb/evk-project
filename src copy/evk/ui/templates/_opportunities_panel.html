@@ -1,0 +1,54 @@
+<section id="opportunities" class="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+  <div class="flex items-baseline justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold tracking-tight text-slate-950">Opportunities</h2>
+      <p class="mt-0.5 text-sm leading-6 text-slate-600">Soonest deadlines first, with direct links to the source when available.</p>
+    </div>
+    <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium tabular-nums text-slate-600">{{ opportunities|length }} tracked</span>
+  </div>
+
+  <div class="mt-4">
+    <label class="block">
+      <span class="sr-only">Search opportunities</span>
+      <input
+        type="text"
+        id="opportunity-search"
+        placeholder="Search by title, organization, or tags..."
+        class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-4 focus:ring-brand-100"
+        oninput="filterOpportunities()"
+      />
+    </label>
+  </div>
+
+  <ul id="opportunities-list" class="mt-5 space-y-2">
+    {% for o in opportunities %}
+    <li>
+      <a
+        href="{{ o.inner.url if o.inner.url else '#opportunities' }}"
+        {% if o.inner.url %}target="_blank" rel="noopener noreferrer"{% endif %}
+        class="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
+      >
+        <div class="w-16 shrink-0 text-center">
+          {% if o.days_until is not none %}
+          {% set c = 'rose' if o.days_until <= 7 else ('amber' if o.days_until <= 30 else 'emerald') %}
+          <div class="text-sm font-semibold text-{{ c }}-600 tabular-nums">{{ o.days_until }}d</div>
+          <div class="text-[9px] uppercase tracking-widest text-slate-500">left</div>
+          {% elif o.deadline %}
+          <div class="text-xs font-medium text-slate-500">past</div>
+          <div class="text-[9px] uppercase tracking-widest text-slate-400">due</div>
+          {% else %}
+          <div class="text-xs text-slate-500">rolling</div>
+          {% endif %}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="truncate font-medium text-slate-900 transition group-hover:text-brand-700">{{ o.title }}</div>
+          <div class="truncate text-xs text-slate-500">{{ o.kind.value }} · {{ o.organization }}</div>
+        </div>
+        <svg class="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5h5v5M10 14 19 5"/><path d="M19 14v5H5V5h5"/></svg>
+      </a>
+    </li>
+    {% else %}
+    <li class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No opportunities yet.</li>
+    {% endfor %}
+  </ul>
+</section>

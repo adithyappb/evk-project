@@ -1,0 +1,155 @@
+{% set s = setup %}
+{% set all_done = s.phase == 5 %}
+
+<section id="setup-wizard" class="mt-6 rounded-[1.75rem] border {% if all_done %}border-emerald-200 bg-emerald-50/60{% else %}border-brand-200 bg-brand-50/40{% endif %} p-6 shadow-sm">
+
+  {# ── Header ── #}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <div class="inline-flex items-center gap-1.5 rounded-full border {% if all_done %}border-emerald-300 bg-emerald-100 text-emerald-700{% else %}border-brand-300 bg-brand-100 text-brand-700{% endif %} px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]">
+        {% if all_done %}✓ Pilot ready{% else %}Setup · Phase {{ s.phase }} of 5{% endif %}
+      </div>
+      <h2 class="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+        {% if all_done %}EVkids is live — pilot checklist complete.
+        {% elif s.phase == 1 %}Connect your credentials to unlock the pipeline.
+        {% elif s.phase == 2 %}Send a test newsletter to verify the pipeline end-to-end.
+        {% elif s.phase == 3 %}Import your real student roster.
+        {% elif s.phase == 4 %}Review and approve your first matched draft.
+        {% endif %}
+      </h2>
+    </div>
+    {% if not all_done %}
+    <span class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 tabular-nums">
+      {{ [s.gmail_ok, s.gemini_ok, s.password_changed, s.students_imported, s.newsletter_received, s.first_approval_done] | select | list | length }}/6 steps done
+    </span>
+    {% endif %}
+  </div>
+
+  {% if all_done %}
+  <p class="mt-2 text-sm text-emerald-800">All pilot steps are complete. Keep an eye on the review queue and delivery stats above.</p>
+  {% else %}
+
+  {# ── Steps list ── #}
+  <ol class="mt-5 space-y-3">
+
+    {# Step 1a — Gmail #}
+    <li class="flex gap-3 rounded-2xl border {% if s.gmail_ok %}border-emerald-200 bg-white{% else %}border-slate-200 bg-white{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.gmail_ok %}✅{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium text-slate-900 {% if s.gmail_ok %}line-through text-slate-400{% endif %}">Add Gmail App Password</div>
+        {% if not s.gmail_ok %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          Open <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">.env</code> in the project root and fill in:
+        </p>
+        <pre class="mt-2 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-[12px] leading-5 text-slate-100"><code>GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   # 16-char App Password
+GMAIL_USER=evkidsorchestrator@gmail.com</code></pre>
+        <p class="mt-2 text-xs text-slate-500">
+          Get an App Password at
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" class="underline hover:text-brand-700">myaccount.google.com → Security → App Passwords</a>.
+          Then restart the server: <code class="rounded bg-slate-100 px-1 font-mono text-xs">uv run evk serve</code>
+        </p>
+        {% endif %}
+      </div>
+    </li>
+
+    {# Step 1b — Gemini #}
+    <li class="flex gap-3 rounded-2xl border {% if s.gemini_ok %}border-emerald-200 bg-white{% else %}border-slate-200 bg-white{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.gemini_ok %}✅{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium text-slate-900 {% if s.gemini_ok %}line-through text-slate-400{% endif %}">Add Gemini API key</div>
+        {% if not s.gemini_ok %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          In <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">.env</code> set:
+        </p>
+        <pre class="mt-2 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-[12px] leading-5 text-slate-100"><code>GOOGLE_API_KEY=AIza...   # from aistudio.google.com/apikey (free)</code></pre>
+        <p class="mt-2 text-xs text-slate-500">
+          Get a free key at
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="underline hover:text-brand-700">aistudio.google.com/apikey</a>.
+          No billing required for the free tier. Restart the server after saving.
+        </p>
+        {% endif %}
+      </div>
+    </li>
+
+    {# Step 1c — Change default password #}
+    <li class="flex gap-3 rounded-2xl border {% if s.password_changed %}border-emerald-200 bg-white{% else %}border-slate-200 bg-white{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.password_changed %}✅{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium text-slate-900 {% if s.password_changed %}line-through text-slate-400{% endif %}">Change the default admin password</div>
+        {% if not s.password_changed %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          The default <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">ChangeMe123!</code> is still active.
+          In <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">.env</code> update:
+        </p>
+        <pre class="mt-2 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-[12px] leading-5 text-slate-100"><code>AUTH_LOCAL_DEMO_PASSWORD=YourNewSecurePass!2</code></pre>
+        <p class="mt-2 text-xs text-slate-500">Restart the server, then sign in with the new password. Sign-in links for all accounts use this shared password.</p>
+        {% endif %}
+      </div>
+    </li>
+
+    {# Step 2 — Pipeline test #}
+    <li class="flex gap-3 rounded-2xl border {% if s.newsletter_received %}border-emerald-200 bg-white{% elif s.phase < 2 %}border-slate-100 bg-slate-50/60{% else %}border-amber-200 bg-amber-50/60{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.newsletter_received %}✅{% elif s.phase < 2 %}🔒{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium {% if s.newsletter_received %}line-through text-slate-400{% elif s.phase < 2 %}text-slate-400{% else %}text-slate-900{% endif %}">Test the pipeline end-to-end</div>
+        {% if not s.newsletter_received and s.phase >= 2 %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          Forward or compose a sample newsletter email to
+          <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">evkidsorchestrator@gmail.com</code>,
+          then run:
+        </p>
+        <pre class="mt-2 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-[12px] leading-5 text-slate-100"><code>uv run evk poll      # fetch unread emails from Gmail
+uv run evk ingest    # classify + parse into opportunities
+uv run evk digest    # match to students → generate drafts</code></pre>
+        <p class="mt-2 text-xs text-slate-500">Drafts will appear in the review queue above once this step succeeds.</p>
+        {% elif s.phase < 2 %}
+        <p class="mt-1 text-xs text-slate-400">Complete credentials first (steps 1–3 above).</p>
+        {% endif %}
+      </div>
+    </li>
+
+    {# Step 3 — Import students #}
+    <li class="flex gap-3 rounded-2xl border {% if s.students_imported %}border-emerald-200 bg-white{% elif s.phase < 3 %}border-slate-100 bg-slate-50/60{% else %}border-amber-200 bg-amber-50/60{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.students_imported %}✅{% elif s.phase < 3 %}🔒{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium {% if s.students_imported %}line-through text-slate-400{% elif s.phase < 3 %}text-slate-400{% else %}text-slate-900{% endif %}">Import your real student roster</div>
+        {% if not s.students_imported and s.phase >= 3 %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          Upload your caseload spreadsheet as a CSV. Students start <em>inactive</em> until you activate them after receiving consent forms.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <a href="{{ request.url_for('students_page') }}" class="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700">
+            Go to Students →
+          </a>
+        </div>
+        {% elif s.phase < 3 %}
+        <p class="mt-1 text-xs text-slate-400">Complete the pipeline test first (step 4 above).</p>
+        {% endif %}
+      </div>
+    </li>
+
+    {# Step 4 — First approval #}
+    <li class="flex gap-3 rounded-2xl border {% if s.first_approval_done %}border-emerald-200 bg-white{% elif s.phase < 4 %}border-slate-100 bg-slate-50/60{% else %}border-amber-200 bg-amber-50/60{% endif %} px-4 py-3.5 shadow-sm">
+      <div class="mt-0.5 shrink-0 text-lg leading-none">{% if s.first_approval_done %}✅{% elif s.phase < 4 %}🔒{% else %}⬜{% endif %}</div>
+      <div class="min-w-0 flex-1">
+        <div class="font-medium {% if s.first_approval_done %}line-through text-slate-400{% elif s.phase < 4 %}text-slate-400{% else %}text-slate-900{% endif %}">Approve and send your first draft</div>
+        {% if not s.first_approval_done and s.phase >= 4 %}
+        <p class="mt-1 text-sm leading-6 text-slate-600">
+          Open the review queue, read a matched draft, and click <strong>Approve</strong>. Then run the distributor to deliver it:
+        </p>
+        <pre class="mt-2 overflow-x-auto rounded-xl bg-slate-900 px-4 py-3 text-[12px] leading-5 text-slate-100"><code>uv run evk distribute   # send all APPROVED drafts via Gmail</code></pre>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <a href="{{ request.url_for('drafts_page', status_filter='pending_approval') }}" class="inline-flex items-center gap-1.5 rounded-full border border-brand-300 bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700">
+            Open review queue →
+          </a>
+        </div>
+        {% elif s.phase < 4 %}
+        <p class="mt-1 text-xs text-slate-400">Complete student import first (step 5 above).</p>
+        {% endif %}
+      </div>
+    </li>
+
+  </ol>
+  {% endif %}
+
+</section>

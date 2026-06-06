@@ -15,5 +15,5 @@ your profile ({{ student.level.value.replace('_',' ') }}).
 
 Reply to this email anytime — a human is always on the other end.
 
-— The EVkids Team
+— The Opportunities Team
 (Generated {{ generated_at }})

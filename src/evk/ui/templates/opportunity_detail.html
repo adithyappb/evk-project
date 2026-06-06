@@ -377,6 +377,32 @@
         {% endfor %}
       </ul>
     </div>
+    {# ── Assign to student (Admin + NGO Admin) ── #}
+    {% if current_user.role.value in ('admin', 'ngo_admin') and all_students %}
+    <div class="rounded-[1.75rem] border border-sky-100 bg-sky-50/60 p-6 shadow-sm">
+      <h2 class="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Assign to Student</h2>
+      <p class="mt-1 text-xs leading-5 text-slate-500">Creates a draft in the review queue for a specific student — useful when you know the fit without waiting for the automatic pipeline.</p>
+
+      <form method="POST" action="{{ request.url_for('opportunity_assign', opp_id=opp.id) }}"
+            class="mt-4 flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-xs font-semibold text-slate-600 mb-1.5">Student</label>
+          <select name="student_id"
+            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100">
+            {% for s in all_students %}
+            <option value="{{ s.id }}">{{ s.name }} — {{ s.school or s.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit"
+          class="inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 whitespace-nowrap">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Create draft
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
   </div>
 
 </div>

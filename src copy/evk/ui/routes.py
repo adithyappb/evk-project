@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -15,13 +15,12 @@ from evk.agents.digest import DigestAgent
 from evk.agents.distributor import DistributorAgent
 from evk.agents.ingestion import IngestionAgent
 from evk.agents.reminder import ReminderAgent
-from evk.auth import AuthError, AuthService, TerminalAuthNotifier, build_auth_notifier
+from evk.auth import AuthError, AuthService, build_auth_notifier
 from evk.config import Settings, get_settings
 from evk.factory import describe_wiring, get_inkbox, get_repos
-from evk.logging import logger
 from evk.firestore_repo import Repos
 from evk.inkbox_client import InboundMessage, InkboxClient
-from evk.models import AppUser, DraftMessage, DraftStatus, LoginChallenge, Opportunity, Student, StudentLevel, UserRole
+from evk.models import AppUser, DraftMessage, DraftStatus, Opportunity, UserRole
 from evk.ui import TEMPLATES_DIR
 
 router = APIRouter(tags=["ui"])
@@ -379,19 +378,9 @@ def _render_drafts_with_stats(
 
 
 def _staff_redirect(request: Request, user: AppUser | None) -> RedirectResponse | None:
-    """Admin-only guard."""
     if user is None:
         return _redirect(request, "login_page")
     if user.role is UserRole.ADMIN:
-        return None
-    return _redirect(request, "app_home")
-
-
-def _staff_or_ngo_redirect(request: Request, user: AppUser | None) -> RedirectResponse | None:
-    """Guard that allows both Admin and NGO Admin — used for opportunity management."""
-    if user is None:
-        return _redirect(request, "login_page")
-    if user.role in (UserRole.ADMIN, UserRole.NGO_ADMIN):
         return None
     return _redirect(request, "app_home")
 
@@ -573,58 +562,6 @@ def auth_verify(
     return response
 
 
-@router.post("/auth/resend", response_class=HTMLResponse, name="auth_resend")
-def auth_resend(
-    request: Request,
-    email: str = Form(...),
-    auth: AuthService = Depends(_auth_dep),
-) -> HTMLResponse:
-    """Re-issue a login OTP for an email address — no access_key required.
-
-    Security: we look up the user by email and only resend if an *existing*
-    session challenge was already started (i.e. the user successfully passed
-    step 1 within the last TTL window).  If no prior challenge exists we
-    silently return the same page rather than revealing whether the email
-    exists.
-    """
-    email_norm = email.strip().lower()
-    # Only resend if the user exists and is active — never reveal existence otherwise.
-    user = auth.repos.users.get_by_email(email_norm)
-    dev_code: str | None = None
-    flash_msg = "A new code has been sent."
-
-    if user is not None and user.is_active:
-        import secrets
-        from evk.auth import hash_login_code
-        code = f"{secrets.randbelow(1_000_000):06d}"
-        challenge = LoginChallenge(
-            id=f"challenge_{user.id}_{secrets.token_hex(4)}",
-            user_id=user.id,
-            email=user.email,
-            code_hash=hash_login_code(code, user_id=user.id),
-            expires_at=datetime.now(UTC) + timedelta(minutes=auth.settings.login_code_ttl_minutes),
-            purpose="login",
-        )
-        auth.repos.login_challenges.upsert(challenge)
-        auth.notifier.send_code(email=user.email, code=code)
-        if isinstance(auth.notifier, TerminalAuthNotifier):
-            dev_code = auth.notifier.last_code  # type: ignore[attr-defined]
-
-    return templates.TemplateResponse(
-        request,
-        "auth_verify.html",
-        {
-            "request": request,
-            "current_user": None,
-            "wiring": describe_wiring(),
-            "email": email_norm,
-            "flash": flash_msg,
-            "delivery_mode": auth.settings.auth_email_delivery_mode,
-            "dev_code": dev_code,
-        },
-    )
-
-
 @router.get("/forgot", response_class=HTMLResponse, name="forgot_page")
 def forgot_page(
     request: Request,
@@ -784,11 +721,9 @@ def student_dashboard(
             "current_user": current_user,
             "wiring": describe_wiring(),
             "student": student,
-            "drafts": drafts[:20],
+            "drafts": drafts[:8],
             "opportunity_map": opportunity_map,
-            "recommended_opportunities": _decorate_opps(
-                [o for o in repos.opportunities.list_all(limit=200) if not o.needs_review and not o.is_duplicate]
-            ),
+            "recommended_opportunities": _decorate_opps(repos.opportunities.list_all(limit=12)),
         },
     )
 
@@ -820,233 +755,6 @@ def drafts_page(
                 else "Review the messages that already moved through the send flow."
             ),
             **_draft_panel_context(request, repos, status_filter, current_user),
-        },
-    )
-
-
-@router.get("/admin/kpi", response_class=HTMLResponse, name="admin_kpi")
-def admin_kpi(
-    request: Request,
-    period: str = "all",
-    repos: Repos = Depends(_repos_dep),
-    settings: Settings = Depends(_settings_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    """KPI dashboard — operational stats + editable outcome tracker."""
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-
-    import json as _json, statistics as _stats_mod
-    from pathlib import Path as _Path
-
-    # ── Period filter ────────────────────────────────────────────────────────
-    _VALID_PERIODS = ("all", "week", "month", "quarter")
-    if period not in _VALID_PERIODS:
-        period = "all"
-
-    now = datetime.now(UTC)
-    _period_starts = {
-        "week":    now - timedelta(days=7),
-        "month":   now - timedelta(days=30),
-        "quarter": now - timedelta(days=91),
-    }
-    cutoff = _period_starts.get(period)  # None means "all time"
-
-    def _after_cutoff(dt: datetime | None) -> bool:
-        if cutoff is None:
-            return True
-        if dt is None:
-            return False
-        aware = dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
-        return aware >= cutoff
-
-    # ── Operational metrics ──────────────────────────────────────────────────
-    all_drafts = repos.drafts.list_all()
-    all_opps   = repos.opportunities.list_all()
-    all_emails = repos.raw_emails.list_all()
-
-    active_opps = [o for o in all_opps if not o.needs_review and not o.is_duplicate]
-
-    # Apply period filter to sent drafts and ingested emails
-    sent_drafts   = [d for d in all_drafts if d.status == DraftStatus.SENT and _after_cutoff(d.sent_at)]
-    approved      = [d for d in all_drafts if d.status == DraftStatus.APPROVED and _after_cutoff(d.approved_at)]
-    period_emails = [e for e in all_emails if _after_cutoff(e.received_at)]
-
-    review_hours_list = [
-        (d.sent_at - d.created_at).total_seconds() / 3600
-        for d in sent_drafts
-        if d.sent_at and d.created_at
-    ]
-    avg_review_hours = round(_stats_mod.mean(review_hours_list), 1) if review_hours_list else None
-
-    ops = {
-        "emails_ingested":  len(period_emails) if period != "all" else len(all_emails),
-        "opps_classified":  len(active_opps),
-        "opps_in_review":   sum(1 for o in all_opps if o.needs_review),
-        "drafts_generated": len([d for d in all_drafts if _after_cutoff(d.created_at)]),
-        "drafts_approved":  len(approved),
-        "emails_sent":      len(sent_drafts),
-        "avg_review_hours": avg_review_hours,
-    }
-
-    # ── Outcome tracking (file-backed) ───────────────────────────────────────
-    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
-    try:
-        outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
-    except Exception:
-        outcomes = []
-
-    return templates.TemplateResponse(
-        request,
-        "admin_kpi.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "wiring": describe_wiring(),
-            "ops": ops,
-            "outcomes": outcomes,
-            "period": period,
-        },
-    )
-
-
-@router.post("/admin/kpi/outcome", name="admin_kpi_outcome_add")
-def admin_kpi_outcome_add(
-    request: Request,
-    period: str = Form(...),
-    applications: str = Form(""),
-    interviews: str = Form(""),
-    scholarships: str = Form(""),
-    notes: str = Form(""),
-    settings: Settings = Depends(_settings_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    import json as _json
-    from pathlib import Path as _Path
-    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
-    outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
-    outcomes.append({
-        "period": period.strip(),
-        "applications": applications.strip(),
-        "interviews": interviews.strip(),
-        "scholarships": scholarships.strip(),
-        "notes": notes.strip(),
-    })
-    kpi_file.write_text(_json.dumps(outcomes, indent=2))
-    return _redirect(request, "admin_kpi")
-
-
-@router.post("/admin/kpi/outcome/{idx}/delete", name="admin_kpi_outcome_delete")
-def admin_kpi_outcome_delete(
-    idx: int,
-    request: Request,
-    settings: Settings = Depends(_settings_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    guard = _staff_redirect(request, current_user)  # admin-only for delete
-    if guard is not None:
-        return guard
-    import json as _json
-    from pathlib import Path as _Path
-    kpi_file = _Path(settings.local_data_dir) / "kpi_outcomes.json"
-    outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
-    if 0 <= idx < len(outcomes):
-        outcomes.pop(idx)
-        kpi_file.write_text(_json.dumps(outcomes, indent=2))
-    return _redirect(request, "admin_kpi")
-
-
-@router.get("/admin/test-logins", response_class=HTMLResponse, name="admin_test_logins")
-def admin_test_logins(
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    """Pilot-only tool: issue login codes for accounts with placeholder email addresses."""
-    guard = _staff_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    users = sorted(repos.users.list_all(), key=lambda u: (u.role.value, u.email))
-    return templates.TemplateResponse(
-        request,
-        "admin_test_login.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "wiring": describe_wiring(),
-            "users": users,
-            "code_issued": None,
-            "code_email": None,
-            "flash": None,
-            "ttl_minutes": get_settings().login_code_ttl_minutes,
-        },
-    )
-
-
-@router.post("/admin/test-logins/issue", name="admin_test_login_issue")
-def admin_test_login_issue(
-    request: Request,
-    email: str = Form(...),
-    repos: Repos = Depends(_repos_dep),
-    auth: AuthService = Depends(_auth_dep),
-    settings: Settings = Depends(_settings_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    import secrets as _sec
-    from evk.auth import hash_login_code
-    users = sorted(repos.users.list_all(), key=lambda u: (u.role.value, u.email))
-    user = repos.users.get_by_email(email.strip().lower())
-    code_issued = None
-    flash = None
-    if user is None:
-        flash = f"No account found for {email}"
-    else:
-        code = f"{_sec.randbelow(1_000_000):06d}"
-        challenge = LoginChallenge(
-            id=f"challenge_{user.id}_{_sec.token_hex(4)}",
-            user_id=user.id,
-            email=user.email,
-            code_hash=hash_login_code(code, user_id=user.id),
-            expires_at=datetime.now(UTC) + timedelta(minutes=settings.login_code_ttl_minutes),
-            purpose="login",
-        )
-        repos.login_challenges.upsert(challenge)
-        code_issued = code
-        print(f"[EVkids test-login] {user.email}: {code}", flush=True)
-    if code_issued:
-        # Code issued — jump directly to the verify page with it pre-shown.
-        return templates.TemplateResponse(
-            request,
-            "auth_verify.html",
-            {
-                "request": request,
-                "current_user": None,
-                "wiring": describe_wiring(),
-                "email": email,
-                "flash": None,
-                "delivery_mode": "terminal",
-                "dev_code": code_issued,
-            },
-        )
-    return templates.TemplateResponse(
-        request,
-        "admin_test_login.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "wiring": describe_wiring(),
-            "users": users,
-            "code_issued": code_issued,
-            "code_email": email,
-            "flash": flash,
-            "ttl_minutes": settings.login_code_ttl_minutes,
         },
     )
 
@@ -1083,21 +791,17 @@ def opportunities_page(
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
 ) -> HTMLResponse:
-    guard = _staff_or_ngo_redirect(request, current_user)
+    guard = _staff_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
-    all_opps = repos.opportunities.list_all(limit=200)
-    active = [o for o in all_opps if not o.needs_review and not o.is_duplicate]
-    needs_review = [o for o in all_opps if o.needs_review]
-
+    opps = repos.opportunities.list_all(limit=100)
     if sort == "deadline":
-        active = sorted(active, key=lambda o: (o.deadline or datetime.max.replace(tzinfo=UTC), o.title))
+        opps = sorted(opps, key=lambda o: (o.deadline or datetime.max.replace(tzinfo=UTC), o.title))
     elif sort == "title":
-        active = sorted(active, key=lambda o: o.title)
+        opps = sorted(opps, key=lambda o: o.title)
     elif sort == "organization":
-        active = sorted(active, key=lambda o: o.organization)
-
+        opps = sorted(opps, key=lambda o: o.organization)
     return templates.TemplateResponse(
         request,
         "opportunities_page.html",
@@ -1106,225 +810,8 @@ def opportunities_page(
             "current_user": current_user,
             "wiring": describe_wiring(),
             "stats": _stats(repos),
-            "opportunities": _decorate_opps(active),
-            "opportunities_review": _decorate_opps(needs_review),
-            "active_count": len(active),
-            "review_count": len(needs_review),
+            "opportunities": _decorate_opps(opps),
             "sort": sort,
-        },
-    )
-
-
-@router.post("/opportunities/{opp_id}/clear-review", name="opportunity_clear_review")
-def opportunity_clear_review(
-    opp_id: str,
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    """Admin clears the needs_review flag — opportunity enters the active catalogue."""
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    opp = repos.opportunities.get(opp_id)
-    if opp is None:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-    repos.opportunities.patch(opp_id, {"needs_review": False, "review_reason": ""})
-    return _redirect(request, "opportunity_detail", opp_id=opp_id)
-
-
-@router.post("/opportunities/{opp_id}/archive", name="opportunity_archive")
-def opportunity_archive(
-    opp_id: str,
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    """Admin archives (soft-deletes) an opportunity — marks as duplicate so it disappears from catalogue."""
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    opp = repos.opportunities.get(opp_id)
-    if opp is None:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-    repos.opportunities.patch(opp_id, {"is_duplicate": True, "needs_review": False})
-    return _redirect(request, "opportunities_page")
-
-
-@router.post("/opportunities/{opp_id}/assign", name="opportunity_assign")
-def opportunity_assign(
-    opp_id: str,
-    request: Request,
-    student_id: str = Form(...),
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    """NGO Admin / Admin: manually assign an opportunity to a specific student as a draft."""
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    opp = repos.opportunities.get(opp_id)
-    if opp is None:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-    student = repos.students.get(student_id)
-    if student is None:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    import secrets as _sec
-    from evk.models import DraftMessage, DraftStatus
-
-    # Build a simple, human-editable draft (no Gemini call needed for manual assignment)
-    deadline_str = opp.deadline.date().isoformat() if opp.deadline else "rolling deadline"
-    link_line = f"\nApply here: {opp.url}\n" if opp.url else ""
-    first_name = student.name.split()[0] if student.name else "there"
-    body_text = (
-        f"Hi {first_name},\n\n"
-        f"We thought you'd be a great fit for this opportunity:\n\n"
-        f"**{opp.title}** — {opp.organization}\n"
-        f"{opp.summary}\n\n"
-        f"Deadline: {deadline_str}"
-        f"{link_line}\n"
-        f"Let us know if you have any questions — we're here to help!\n\n"
-        f"— The EVkids Team"
-    )
-    draft = DraftMessage(
-        id=f"assign_{_sec.token_hex(8)}",
-        student_id=student.id,
-        opportunity_id=opp.id,
-        to_email=student.email,
-        subject=f"Opportunity for you: {opp.title}",
-        body_text=body_text,
-        body_html=f"<p>{body_text.replace(chr(10), '</p><p>')}</p>",
-        match_score=1.0,
-        match_reasons=["manually assigned"],
-        status=DraftStatus.PENDING_APPROVAL,
-    )
-    repos.drafts.upsert(draft)
-    logger.bind(opp_id=opp_id, student_id=student_id, draft_id=draft.id).info("opportunity.manually_assigned")
-    return _redirect(request, "opportunity_detail", opp_id=opp_id)
-
-
-@router.post("/opportunities/{opp_id}/edit", name="opportunity_edit")
-def opportunity_edit(
-    opp_id: str,
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-    # Core fields
-    title: str = Form(""),
-    organization: str = Form(""),
-    kind: str = Form("other"),
-    summary: str = Form(""),
-    eligibility: str = Form(""),
-    deadline_str: str = Form(""),      # YYYY-MM-DD or empty
-    url: str = Form(""),
-    location: str = Form(""),
-    min_level: str = Form("other"),
-    # Comma-separated tag / field lists
-    tags_raw: str = Form(""),
-    fields_raw: str = Form(""),
-    # Review control
-    clear_review: str = Form(""),      # "yes" if admin checks the box
-) -> RedirectResponse:
-    """Save admin edits to an opportunity and optionally clear the review flag."""
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    opp = repos.opportunities.get(opp_id)
-    if opp is None:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-
-    from evk.models import OpportunityKind, StudentLevel
-
-    # Parse deadline
-    deadline_dt: datetime | None = None
-    if deadline_str.strip():
-        try:
-            from datetime import date
-            d = date.fromisoformat(deadline_str.strip())
-            deadline_dt = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
-        except ValueError:
-            pass  # bad date format — leave as None
-
-    # Normalise tag lists
-    tags = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
-    fields = [f.strip().lower() for f in fields_raw.split(",") if f.strip()]
-
-    patch: dict[str, object] = {
-        "title": title.strip() or opp.title,
-        "organization": organization.strip() or opp.organization,
-        "kind": OpportunityKind(kind) if kind else opp.kind,
-        "summary": summary.strip() or opp.summary,
-        "eligibility": eligibility.strip(),
-        "deadline": deadline_dt,
-        "url": url.strip() or None,
-        "location": location.strip(),
-        "min_level": StudentLevel(min_level) if min_level else opp.min_level,
-        "tags": tags if tags else opp.tags,
-        "fields_of_study": fields if fields else opp.fields_of_study,
-    }
-    if clear_review == "yes":
-        patch["needs_review"] = False
-        patch["review_reason"] = ""
-
-    repos.opportunities.patch(opp_id, patch)
-    return _redirect(request, "opportunity_detail", opp_id=opp_id)
-
-
-@router.get("/opportunities/{opp_id}", response_class=HTMLResponse, name="opportunity_detail")
-def opportunity_detail(
-    opp_id: str,
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    guard = _staff_or_ngo_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    assert current_user is not None
-    opp = repos.opportunities.get(opp_id)
-    if opp is None:
-        raise HTTPException(status_code=404, detail="Opportunity not found")
-
-    # Compute per-student match scores (cheap rule-based — no Gemini call).
-    from evk.agents.personalizer import score_match
-    students = repos.students.list_all(limit=200)
-    matches = sorted(
-        [score_match(s, opp) for s in students],
-        key=lambda m: m.score,
-        reverse=True,
-    )
-
-    # Find source email if ingested from Gmail
-    source_email = None
-    if opp.source_raw_email_id:
-        source_email = repos.raw_emails.get(opp.source_raw_email_id)
-
-    # Find any existing drafts for this opportunity
-    all_drafts = repos.drafts.list_all(limit=500)
-    opp_drafts = [d for d in all_drafts if d.opportunity_id == opp_id]
-
-    today = datetime.now(UTC).date()
-    days_until: int | None = None
-    if opp.deadline:
-        delta = (opp.deadline.date() - today).days
-        days_until = delta if delta >= 0 else None
-
-    all_students = repos.students.list_all(limit=200)
-
-    return templates.TemplateResponse(
-        request,
-        "opportunity_detail.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "wiring": describe_wiring(),
-            "opp": opp,
-            "days_until": days_until,
-            "matches": matches,
-            "source_email": source_email,
-            "drafts": opp_drafts,
-            "all_students": all_students,
         },
     )
 
@@ -1459,49 +946,6 @@ def ui_reject(
     )
 
 
-@router.post("/ui/drafts/{draft_id}/save-edit", response_class=HTMLResponse)
-def ui_save_edit(
-    draft_id: str,
-    request: Request,
-    subject: str = Form(...),
-    body_text: str = Form(...),
-    action: str = Form("pending"),   # "pending" or "approve"
-    status_filter: str = "pending_approval",
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-    inkbox: InkboxClient = Depends(_inkbox_dep),
-) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    user = _staff_required(current_user)
-    draft = repos.drafts.get(draft_id)
-    if draft is None:
-        raise HTTPException(status_code=404, detail="Draft not found")
-    # Save edits
-    repos.drafts.patch(draft_id, {
-        "subject": subject.strip(),
-        "body_text": body_text.strip(),
-        "body_html": f"<p>{body_text.strip().replace(chr(10), '</p><p>')}</p>",
-        "status": DraftStatus.PENDING_APPROVAL.value,
-    })
-    # If admin chose approve directly, approve then send it now
-    if action == "approve":
-        repos.drafts.patch(draft_id, {
-            "status": DraftStatus.APPROVED.value,
-            "approved_by": user.email,
-            "approved_at": datetime.now(UTC),
-        })
-        updated = repos.drafts.get(draft_id)
-        if updated:
-            try:
-                dist = DistributorAgent(repos=repos, inkbox=inkbox)
-                dist.send_one(updated)
-            except Exception:
-                pass
-    return _render_drafts_panel(request, repos, status_filter, user)
-
-
 @router.post("/ui/poll", response_class=HTMLResponse)
 def ui_poll(
     request: Request,
@@ -1570,245 +1014,6 @@ def ui_simulate(
         f"Newsletter ingested with status {raw.status.value}. "
         f"Captured {len(raw.extracted_opportunity_ids)} opportunities."
     )
-    return _render_stats(request, repos, user, flash=flash)
-
-
-@router.post("/admin/students/import", name="students_import")
-async def students_import(
-    request: Request,
-    file: UploadFile = File(...),
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    """Parse a CSV and bulk-create inactive Student + AppUser records."""
-    guard = _staff_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    import csv
-    import io
-    import secrets as _sec
-    from evk.auth import hash_access_key
-
-    content = await file.read()
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    for row in reader:
-        email = (row.get("email") or row.get("Email") or "").strip().lower()
-        name = (row.get("name") or row.get("Name") or "").strip()
-        school = (row.get("school") or row.get("School") or row.get("school_name") or "").strip()
-        level_raw = (row.get("level") or row.get("Level") or row.get("grade") or "").strip()
-        if not email or "@" not in email:
-            continue
-        if repos.students.get_by_email(email):
-            continue
-        try:
-            level = StudentLevel(level_raw) if level_raw else StudentLevel.OTHER
-        except ValueError:
-            level = StudentLevel.OTHER
-        sid = f"student_{_sec.token_hex(6)}"
-        student = Student(
-            id=sid,
-            name=name or email.split("@")[0],
-            email=email,
-            level=level,
-            school_name=school,
-            opted_in=False,
-        )
-        repos.students.upsert(student)
-        # Create inactive user
-        salt = _sec.token_hex(8)
-        tmp_pw = _sec.token_urlsafe(16)
-        user = AppUser(
-            id=f"user_student_{sid}",
-            email=email,
-            name=name or email.split("@")[0],
-            role=UserRole.STUDENT,
-            organization=school,
-            student_id=sid,
-            access_key_salt=salt,
-            access_key_hash=hash_access_key(tmp_pw, salt=salt),
-            is_active=False,
-        )
-        repos.users.upsert(user)
-    return _redirect(request, "students_page")
-
-
-@router.post("/admin/students/{student_id}/activate", name="student_activate")
-def student_activate(
-    student_id: str,
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    auth: AuthService = Depends(_auth_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    guard = _staff_redirect(request, current_user)
-    if guard is not None:
-        return guard
-    student = repos.students.get(student_id)
-    if student is None:
-        raise HTTPException(status_code=404)
-    user = repos.users.get_by_email(student.email)
-    if user is None:
-        raise HTTPException(status_code=404)
-    import secrets
-    token = secrets.token_urlsafe(32)
-    expires = datetime.now(UTC) + timedelta(days=7)
-    repos.users.patch(user.id, {
-        "activation_token": token,
-        "activation_token_expires": expires.isoformat(),
-        "is_active": False,
-    })
-    repos.students.patch(student_id, {"opted_in": True})
-    settings = get_settings()
-    setup_url = (
-        str(settings.admin_base_url).rstrip("/")
-        + f"/profile/setup?token={token}&email={student.email}"
-    )
-    try:
-        auth.send_welcome_email(student_email=student.email, setup_url=setup_url)
-    except Exception:
-        logger.exception("student_activate.welcome_email_failed")
-    return _redirect(request, "students_page")
-
-
-@router.get("/profile/setup", response_class=HTMLResponse, name="profile_setup_page")
-def profile_setup_page(
-    request: Request,
-    token: str = "",
-    email: str = "",
-    repos: Repos = Depends(_repos_dep),
-    flash: str = "",
-) -> HTMLResponse:
-    from datetime import datetime as _dt
-    user = repos.users.get_by_email(email.strip().lower()) if email else None
-    if not user or user.activation_token != token:
-        return templates.TemplateResponse(
-            request,
-            "profile_setup.html",
-            {"request": request, "valid": False, "email": email,
-             "flash": "This link is invalid or has expired.",
-             "current_user": None, "wiring": describe_wiring()},
-        )
-    expires = user.activation_token_expires
-    if expires:
-        exp_dt = _dt.fromisoformat(str(expires)) if isinstance(expires, str) else expires
-        if exp_dt.replace(tzinfo=UTC) < datetime.now(UTC):
-            return templates.TemplateResponse(
-                request,
-                "profile_setup.html",
-                {"request": request, "valid": False, "email": email,
-                 "flash": "This link has expired. Ask an admin to resend your welcome email.",
-                 "current_user": None, "wiring": describe_wiring()},
-            )
-    return templates.TemplateResponse(
-        request,
-        "profile_setup.html",
-        {"request": request, "valid": True, "email": email, "token": token,
-         "flash": flash, "current_user": None, "wiring": describe_wiring()},
-    )
-
-
-@router.post("/profile/setup", name="profile_setup_submit")
-def profile_setup_submit(
-    request: Request,
-    email: str = Form(...),
-    token: str = Form(...),
-    password: str = Form(...),
-    confirm_password: str = Form(...),
-    career_interests: list[str] = Form(default=[]),
-    opportunity_types: list[str] = Form(default=[]),
-    notification_frequency: str = Form("weekly"),
-    repos: Repos = Depends(_repos_dep),
-) -> HTMLResponse:
-    user = repos.users.get_by_email(email.strip().lower())
-    if not user or user.activation_token != token:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    if password != confirm_password or len(password) < 8:
-        return templates.TemplateResponse(
-            request,
-            "profile_setup.html",
-            {"request": request, "valid": True, "email": email, "token": token,
-             "flash": "Passwords must match and be at least 8 characters.",
-             "current_user": None, "wiring": describe_wiring()},
-        )
-    import secrets as _s
-    from evk.auth import hash_access_key
-    salt = _s.token_hex(8)
-    repos.users.patch(user.id, {
-        "access_key_salt": salt,
-        "access_key_hash": hash_access_key(password, salt=salt),
-        "is_active": True,
-        "activation_token": None,
-        "activation_token_expires": None,
-    })
-    if user.student_id:
-        repos.students.patch(user.student_id, {
-            "career_interests": career_interests,
-            "opportunity_types_sought": opportunity_types,
-            "notification_frequency": notification_frequency,
-            "opted_in": True,
-        })
-    return _redirect(request, "landing")
-
-
-@router.get("/profile", response_class=HTMLResponse, name="student_profile_page")
-def student_profile_page(
-    request: Request,
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    if current_user is None:
-        return _redirect(request, "login_page")
-    student = repos.students.get(current_user.student_id) if current_user.student_id else None
-    return templates.TemplateResponse(
-        request,
-        "student_profile.html",
-        {"request": request, "current_user": current_user, "student": student,
-         "wiring": describe_wiring(), "flash": None},
-    )
-
-
-@router.post("/profile", name="student_profile_save")
-def student_profile_save(
-    request: Request,
-    career_interests: list[str] = Form(default=[]),
-    opportunity_types: list[str] = Form(default=[]),
-    notification_frequency: str = Form("weekly"),
-    preferred_notification_method: str = Form("email"),
-    phone: str = Form(""),
-    bio: str = Form(""),
-    repos: Repos = Depends(_repos_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> RedirectResponse:
-    if current_user is None or current_user.student_id is None:
-        return _redirect(request, "login_page")
-    repos.students.patch(current_user.student_id, {
-        "career_interests": career_interests,
-        "opportunity_types_sought": opportunity_types,
-        "notification_frequency": notification_frequency,
-        "preferred_notification_method": preferred_notification_method,
-        "phone": phone.strip(),
-        "bio": bio.strip(),
-    })
-    return _redirect(request, "student_dashboard")
-
-
-@router.post("/ui/scrape", response_class=HTMLResponse)
-def ui_scrape(
-    request: Request,
-    source: str = Form(...),
-    repos: Repos = Depends(_repos_dep),
-    inkbox: InkboxClient = Depends(_inkbox_dep),
-    current_user: AppUser | None = Depends(_current_user),
-) -> HTMLResponse:
-    user = _staff_required(current_user)
-    from evk.agents.scraper import WebScraperAgent, SCRAPER_SOURCES
-    if source not in SCRAPER_SOURCES:
-        raise HTTPException(status_code=400, detail=f"Unknown source: {source!r}")
-    try:
-        count = WebScraperAgent(repos=repos, inkbox=inkbox).scrape(source)
-        flash = f"Scraped {SCRAPER_SOURCES[source]['name']}: {count} opportunit{'y' if count == 1 else 'ies'} queued for review."
-    except Exception as exc:
-        flash = f"Scrape failed for {source}: {exc}"
     return _render_stats(request, repos, user, flash=flash)
 
 

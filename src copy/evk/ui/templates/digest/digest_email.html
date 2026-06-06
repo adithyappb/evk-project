@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Your EVK picks — {{ week_key }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f7f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+               style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.06);">
+          <tr>
+            <td style="padding:28px 32px 8px 32px;">
+              <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#64748b;">EVK · week {{ week_key }}</div>
+              <h1 style="margin:6px 0 0 0;font-size:22px;line-height:1.2;color:#0f172a;">
+                Hi {{ student.name.split(' ')[0] }}, here are your top picks
+              </h1>
+              <p style="margin:8px 0 0 0;color:#475569;font-size:14px;line-height:1.55;">
+                We reviewed the latest opportunities and ranked them against your profile
+                ({{ student.level.value.replace('_',' ') }}, {{ ', '.join(student.fields_of_study) or 'open fields' }}).
+                The closer to the top, the stronger the fit.
+              </p>
+            </td>
+          </tr>
+
+          {% for match, opp in picks %}
+          <tr>
+            <td style="padding:12px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                     style="border:1px solid #e2e8f0;border-radius:12px;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
+                      <div style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;">
+                        {{ opp.kind.value }} · {{ opp.organization }}
+                      </div>
+                      <div style="font-size:11px;color:#0ea5e9;font-weight:600;">
+                        match {{ (match.score * 100) | round(0, 'floor') | int }}%
+                      </div>
+                    </div>
+                    <div style="margin-top:4px;font-size:16px;font-weight:600;color:#0f172a;">
+                      {% if opp.url %}
+                        <a href="{{ opp.url }}" style="color:#0f172a;text-decoration:none;">{{ opp.title }}</a>
+                      {% else %}
+                        {{ opp.title }}
+                      {% endif %}
+                    </div>
+                    <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5;">
+                      {{ opp.summary }}
+                    </div>
+                    <div style="margin-top:10px;font-size:12px;color:#64748b;">
+                      {% if opp.deadline %}Deadline: <strong style="color:#0f172a;">{{ opp.deadline.date().isoformat() }}</strong>{% else %}Rolling deadline{% endif %}
+                      {% if opp.location %} · {{ opp.location }}{% endif %}
+                    </div>
+                    <div style="margin-top:10px;font-size:12px;color:#0f766e;">
+                      Why it fits: {{ match.reasons | join(' · ') }}
+                    </div>
+                    {% if opp.url %}
+                    <div style="margin-top:12px;">
+                      <a href="{{ opp.url }}"
+                         style="display:inline-block;padding:8px 14px;border-radius:8px;background:#0f172a;color:#ffffff;text-decoration:none;font-size:13px;font-weight:500;">
+                        View opportunity
+                      </a>
+                    </div>
+                    {% endif %}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {% endfor %}
+
+          <tr>
+            <td style="padding:20px 32px 28px 32px;color:#64748b;font-size:12px;line-height:1.55;">
+              Generated {{ generated_at }}. Reply to this email anytime — a human is always on the other end.
+              If these aren't landing, update your interests and we'll re-tune next week.
+            </td>
+          </tr>
+        </table>
+        <div style="color:#94a3b8;font-size:11px;margin-top:12px;">EVK Opportunities · human-in-the-loop, always.</div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

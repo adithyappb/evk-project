@@ -70,25 +70,6 @@ class ReminderAgent:
         return sent
 
     def _send_reminder(self, *, student: Student, opp: Opportunity, days_before: int) -> None:
-        use_whatsapp = (
-            student.preferred_notification_method == "whatsapp"
-            and bool(student.phone)
-        )
-        if use_whatsapp:
-            self._send_whatsapp_reminder(student=student, opp=opp, days_before=days_before)
-        else:
-            self._send_email_reminder(student=student, opp=opp, days_before=days_before)
-        reminder_id = f"{student.id}_{opp.id}_{days_before}"
-        self._repos.reminders.upsert(
-            ReminderLog(
-                id=reminder_id,
-                student_id=student.id,
-                opportunity_id=opp.id,
-                days_before=days_before,
-            )
-        )
-
-    def _send_email_reminder(self, *, student: Student, opp: Opportunity, days_before: int) -> None:
         subject = f"Reminder: {opp.title} — {days_before} day{'s' if days_before != 1 else ''} left"
         deadline_str = opp.deadline.date().isoformat() if opp.deadline else "soon"
         link_line = f"\nApply: {opp.url}\n" if opp.url else ""
@@ -99,35 +80,24 @@ class ReminderAgent:
             f"{'s' if days_before != 1 else ''} away.\n\n"
             f"{opp.summary}\n{link_line}\n"
             "If you've already applied, ignore this — and good luck!\n\n"
-            "— The EVkids Team\n"
+            "— The Opportunities Team\n"
         )
         message_id = self._inkbox.send(to=[student.email], subject=subject, body_text=body_text)
+        reminder_id = f"{student.id}_{opp.id}_{days_before}"
+        self._repos.reminders.upsert(
+            ReminderLog(
+                id=reminder_id,
+                student_id=student.id,
+                opportunity_id=opp.id,
+                days_before=days_before,
+            )
+        )
         logger.bind(
             student_id=student.id,
             opp_id=opp.id,
             days_before=days_before,
             inkbox_id=message_id,
-        ).info("reminder.email_sent")
-
-    def _send_whatsapp_reminder(self, *, student: Student, opp: Opportunity, days_before: int) -> None:
-        from evk.twilio_client import TwilioClient
-        deadline_str = opp.deadline.date().isoformat() if opp.deadline else "soon"
-        first_name = student.name.split()[0] if student.name else "there"
-        link_line = f"\n🔗 Apply: {opp.url}" if opp.url else ""
-        body = (
-            f"👋 Hi {first_name}! Quick reminder from EVkids:\n\n"
-            f"*{opp.title}* ({opp.organization})\n"
-            f"⏰ Deadline: {deadline_str} — {days_before} day{'s' if days_before != 1 else ''} left"
-            f"{link_line}\n\n"
-            "If you've already applied, ignore this — good luck!"
-        )
-        sid = TwilioClient().send_whatsapp(to=student.phone, body=body)
-        logger.bind(
-            student_id=student.id,
-            opp_id=opp.id,
-            days_before=days_before,
-            twilio_sid=sid,
-        ).info("reminder.whatsapp_sent")
+        ).info("reminder.sent")
 
 
 def _closest_window(days_left: float, windows: list[int]) -> int | None:
