@@ -1,0 +1,122 @@
+{
+  "name": "EVkids Digest Agent",
+  "version": "1.0.0",
+  "description": "Compiles a personalised weekly digest email for each opted-in student. No LLM involved — uses the same rule-based scorer as the Personalizer to rank opportunities, then renders a deterministic Jinja2 template. Fully idempotent per ISO-week: running the agent twice in the same week produces exactly one draft per student. Output goes through the same pending-approval queue as all other drafts.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "natural_language_processing/text_generation/summarization",
+      "id": 10501
+    },
+    {
+      "name": "natural_language_processing/information_retrieval_synthesis/recommendation",
+      "id": 10305
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": [
+        "src/evk/agents/digest.py",
+        "src/evk/ui/templates/digest/digest_email.html",
+        "src/evk/ui/templates/digest/digest_email.txt"
+      ]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": false,
+    "evkids:human_gate": true,
+    "evkids:output_status": "pending_approval",
+    "evkids:schedule": "weekly (ISO week boundary)",
+    "evkids:idempotency_key": "student_id + ISO_week",
+    "evkids:top_n_opportunities": 5,
+    "evkids:min_match_score": 0.5,
+    "evkids:rendering": "jinja2_template",
+    "evkids:output_formats": ["text/plain", "text/html"],
+    "evkids:opportunity_filter": "future-dated + rolling deadline, not needs_review, not is_duplicate"
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Digest Agent",
+          "url": "python://evk.agents.digest:DigestAgent",
+          "description": "Generates a weekly summary email for each opted-in student. Uses rule-based match scoring to select and rank the top 5 opportunities, renders via Jinja2 templates (no LLM), and queues as pending-approval DraftMessages. Idempotent per student per ISO-week.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": true,
+            "requires_llm": false,
+            "human_approval_required": true
+          },
+          "skills": [
+            {
+              "id": "build_and_queue",
+              "name": "Build and Queue Weekly Digests",
+              "description": "For each opted-in student, scores all available opportunities, selects the top 5 (min score 0.5), renders a personalised text + HTML digest, and persists a DraftMessage with opportunity_id='digest:{week_key}'. Safe to run multiple times in the same week — will not produce duplicate drafts.",
+              "tags": ["digest", "weekly", "scheduled", "template", "no-llm"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Reference timestamp for week calculation. Defaults to now (UTC)."
+                  }
+                }
+              },
+              "outputSchema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "draft_id": {"type": "string"},
+                    "student_id": {"type": "string"},
+                    "week_key": {"type": "string", "description": "ISO week identifier, e.g. 2026W24"},
+                    "top_picks": {
+                      "type": "integer",
+                      "description": "Number of opportunities included in this student's digest"
+                    },
+                    "status": {"type": "string", "enum": ["pending_approval", "skipped"]},
+                    "skip_reason": {"type": "string", "nullable": true}
+                  }
+                }
+              },
+              "examples": [
+                "Run weekly digest for all students — ISO week 24 2026",
+                "Preview digest for student_maya before queuing"
+              ]
+            },
+            {
+              "id": "build_one",
+              "name": "Preview Digest for Single Student",
+              "description": "Renders (but does not persist) a digest for a single student. Used by the admin dashboard to preview before triggering a full run.",
+              "tags": ["preview", "single-student", "no-persist"],
+              "examples": [
+                "Preview this week's digest for Jordan Williams",
+                "Check what opportunities would appear in Maya's next email"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

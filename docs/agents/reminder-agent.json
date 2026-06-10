@@ -1,0 +1,93 @@
+{
+  "name": "EVkids Reminder Agent",
+  "version": "1.0.0",
+  "description": "Scans for opportunities whose deadlines fall within configured reminder windows (default: 7 days and 2 days before) and sends a short nudge to every student who received a draft for that opportunity. Uses a ReminderLog to guarantee exactly-once delivery per student per opportunity per window — idempotent across any number of scheduled runs. No LLM involved; messages use a fixed template.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "technology/software_engineering/scheduling_automation",
+      "id": 20301
+    },
+    {
+      "name": "technology/communication/notification_delivery",
+      "id": 30201
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/reminder.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": false,
+    "evkids:human_gate": false,
+    "evkids:schedule": "hourly (cron/Cloud Scheduler/APScheduler)",
+    "evkids:reminder_windows_days": [7, 2],
+    "evkids:idempotency_key": "student_id + opportunity_id + days_before",
+    "evkids:channels": ["email/inkbox", "whatsapp/twilio"],
+    "evkids:channel_selection": "student.preferred_notification_method",
+    "evkids:recipient_filter": "students who received a draft for the expiring opportunity"
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Reminder Agent",
+          "url": "python://evk.agents.reminder:ReminderAgent",
+          "description": "Sends deadline-reminder nudges to students whose opportunities are approaching the configured reminder windows (7 days, 2 days). Idempotent per student+opportunity+window via ReminderLog. No LLM — fixed template. Runs directly without human approval.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": true,
+            "requires_llm": false,
+            "human_approval_required": false,
+            "scheduled": true
+          },
+          "skills": [
+            {
+              "id": "run",
+              "name": "Run Reminder Pass",
+              "description": "Queries for all opportunities with a deadline within the configured reminder windows, finds students who received a draft for each, checks the ReminderLog for already-sent reminders, and sends any outstanding nudges via the student's preferred channel. Returns the count of reminders sent.",
+              "tags": ["reminders", "scheduled", "deadline", "nudge", "no-llm", "idempotent"],
+              "inputSchema": {
+                "type": "null",
+                "description": "No input required — agent reads deadline windows and student data from repository"
+              },
+              "outputSchema": {
+                "type": "object",
+                "properties": {
+                  "reminders_sent": {
+                    "type": "integer",
+                    "description": "Total number of reminders dispatched in this run"
+                  }
+                }
+              },
+              "examples": [
+                "Hourly reminder sweep — check for deadlines in next 7 or 2 days",
+                "Run after adding a batch of new opportunities to catch any immediate deadlines"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

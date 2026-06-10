@@ -236,6 +236,7 @@ def _dashboard_context(repos: Repos, current_user: AppUser) -> dict[str, object]
         "flash": None,
         "users": sorted(repos.users.list_all(limit=200), key=lambda user: (user.role.value, user.name)),
         "role_summary": _role_summary(repos),
+        "levels": list(StudentLevel),
     }
 
 
@@ -400,7 +401,7 @@ def _role_home(user: AppUser) -> str:
     if user.role is UserRole.ADMIN:
         return "admin_dashboard"
     if user.role is UserRole.NGO_ADMIN:
-        return "ngo_dashboard"
+        return "admin_dashboard"
     return "student_dashboard"
 
 
@@ -723,7 +724,7 @@ def admin_dashboard(
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
 ) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
@@ -770,7 +771,9 @@ def student_dashboard(
         return _redirect(request, _role_home(current_user))
     student = repos.students.get(current_user.student_id) if current_user.student_id else None
     drafts = [
-        draft for draft in repos.drafts.list_all(limit=200) if draft.student_id == current_user.student_id
+        draft for draft in repos.drafts.list_all(limit=200)
+        if draft.student_id == current_user.student_id
+        and draft.status in (DraftStatus.SENT, DraftStatus.APPROVED)
     ]
     drafts.sort(key=lambda draft: draft.created_at, reverse=True)
     opportunity_map = {
@@ -1058,7 +1061,7 @@ def students_page(
     repos: Repos = Depends(_repos_dep),
     current_user: AppUser | None = Depends(_current_user),
 ) -> HTMLResponse:
-    guard = _staff_redirect(request, current_user)
+    guard = _staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
@@ -1071,6 +1074,7 @@ def students_page(
             "wiring": describe_wiring(),
             "stats": _stats(repos),
             "students": repos.students.list_all(limit=50),
+            "levels": list(StudentLevel),
         },
     )
 
@@ -1113,6 +1117,153 @@ def opportunities_page(
             "sort": sort,
         },
     )
+
+
+@router.get("/opportunities/new", response_class=HTMLResponse, name="opportunity_new_page")
+def opportunity_new_page(
+    request: Request,
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    """Admin / NGO admin: blank form to add an opportunity directly."""
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    assert current_user is not None
+    from evk.models import OpportunityKind, StudentLevel
+    return templates.TemplateResponse(
+        request,
+        "opportunity_new.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "kinds": list(OpportunityKind),
+            "levels": list(StudentLevel),
+        },
+    )
+
+
+@router.post("/opportunities/new", name="opportunity_new_submit")
+def opportunity_new_submit(
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+    title: str = Form(""),
+    organization: str = Form(""),
+    kind: str = Form("other"),
+    summary: str = Form(""),
+    eligibility: str = Form(""),
+    deadline_str: str = Form(""),
+    url: str = Form(""),
+    location: str = Form(""),
+    min_level: str = Form("other"),
+    tags_raw: str = Form(""),
+    fields_raw: str = Form(""),
+    notes: str = Form(""),
+) -> RedirectResponse:
+    """Create a new opportunity manually (bypasses Gemini — goes live immediately)."""
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    import uuid as _uuid
+    from evk.models import Opportunity, OpportunityKind, StudentLevel
+
+    deadline_dt: datetime | None = None
+    if deadline_str.strip():
+        try:
+            d = date.fromisoformat(deadline_str.strip())
+            deadline_dt = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+        except ValueError:
+            pass
+
+    tags = [t.strip().lower() for t in tags_raw.split(",") if t.strip()]
+    fields = [f.strip().lower() for f in fields_raw.split(",") if f.strip()]
+
+    opp_id = "manual_" + _uuid.uuid4().hex[:16]
+    opp = Opportunity(
+        id=opp_id,
+        title=title.strip() or "Untitled opportunity",
+        organization=organization.strip(),
+        kind=OpportunityKind(kind) if kind in [k.value for k in OpportunityKind] else OpportunityKind.OTHER,
+        summary=summary.strip(),
+        eligibility=eligibility.strip(),
+        deadline=deadline_dt,
+        url=url.strip() or None,
+        location=location.strip(),
+        min_level=StudentLevel(min_level) if min_level in [lv.value for lv in StudentLevel] else StudentLevel.OTHER,
+        tags=tags,
+        fields_of_study=fields,
+        source_subject=notes.strip() or "Manually added",
+        source_sender=current_user.email if current_user else "admin",  # type: ignore[union-attr]
+        needs_review=False,
+    )
+    repos.opportunities.upsert(opp)
+    return _redirect(request, "opportunity_detail", opp_id=opp_id)
+
+
+@router.get("/opportunities/suggest", response_class=HTMLResponse, name="opportunity_suggest_page")
+def opportunity_suggest_page(
+    request: Request,
+    current_user: AppUser | None = Depends(_current_user),
+) -> HTMLResponse:
+    """Student: suggest an opportunity they found for admin review."""
+    if not current_user:
+        return _redirect(request, "login_page")  # type: ignore[return-value]
+    from evk.models import OpportunityKind
+    return templates.TemplateResponse(
+        request,
+        "opportunity_suggest.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "kinds": list(OpportunityKind),
+        },
+    )
+
+
+@router.post("/opportunities/suggest", name="opportunity_suggest_submit")
+def opportunity_suggest_submit(
+    request: Request,
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+    title: str = Form(""),
+    organization: str = Form(""),
+    kind: str = Form("other"),
+    url: str = Form(""),
+    summary: str = Form(""),
+    deadline_str: str = Form(""),
+) -> RedirectResponse:
+    """Create a student-suggested opportunity; lands in the review queue."""
+    if not current_user:
+        return _redirect(request, "login_page")  # type: ignore[return-value]
+    import uuid as _uuid
+    from evk.models import Opportunity, OpportunityKind
+
+    deadline_dt: datetime | None = None
+    if deadline_str.strip():
+        try:
+            d = date.fromisoformat(deadline_str.strip())
+            deadline_dt = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=UTC)
+        except ValueError:
+            pass
+
+    opp_id = "suggest_" + _uuid.uuid4().hex[:16]
+    opp = Opportunity(
+        id=opp_id,
+        title=title.strip() or "Untitled suggestion",
+        organization=organization.strip(),
+        kind=OpportunityKind(kind) if kind in [k.value for k in OpportunityKind] else OpportunityKind.OTHER,
+        summary=summary.strip(),
+        url=url.strip() or None,
+        deadline=deadline_dt,
+        source_subject="Student suggestion",
+        source_sender=current_user.email,  # type: ignore[union-attr]
+        needs_review=True,
+        review_reason=f"Suggested by student: {current_user.name}",  # type: ignore[union-attr]
+    )
+    repos.opportunities.upsert(opp)
+    return _redirect(request, "student_dashboard")
 
 
 @router.post("/opportunities/{opp_id}/clear-review", name="opportunity_clear_review")
@@ -1337,10 +1488,16 @@ def admin_agents(
     guard = _staff_redirect(request, current_user)
     if guard is not None:
         return guard
+    from evk.agents.scraper import SCRAPER_SOURCES
     return templates.TemplateResponse(
         request,
         "admin_agents.html",
-        {"request": request, "current_user": current_user, "wiring": describe_wiring()},
+        {
+            "request": request,
+            "current_user": current_user,
+            "wiring": describe_wiring(),
+            "scraper_sources": SCRAPER_SOURCES,
+        },
     )
 
 
@@ -1668,6 +1825,79 @@ def student_activate(
     except Exception:
         logger.exception("student_activate.welcome_email_failed")
     return _redirect(request, "students_page")
+
+
+@router.post("/admin/students/{student_id}/edit", name="student_admin_edit")
+def student_admin_edit(
+    student_id: str,
+    request: Request,
+    name: str = Form(""),
+    school_name: str = Form(""),
+    level: str = Form(""),
+    graduation_year: str = Form(""),
+    location: str = Form(""),
+    boston_resident: str = Form(""),
+    first_generation: str = Form(""),
+    bio: str = Form(""),
+    phone: str = Form(""),
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    guard = _staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    if repos.students.get(student_id) is None:
+        raise HTTPException(status_code=404)
+    patch: dict[str, object] = {
+        "location": location.strip(),
+        "boston_resident": boston_resident.lower() in ("on", "true", "1", "yes"),
+        "first_generation": first_generation.lower() in ("on", "true", "1", "yes"),
+        "bio": bio.strip(),
+    }
+    if name.strip():
+        patch["name"] = name.strip()
+    if school_name.strip():
+        patch["school_name"] = school_name.strip()
+    if level.strip():
+        try:
+            patch["level"] = StudentLevel(level.strip())
+        except ValueError:
+            pass
+    if graduation_year.strip():
+        try:
+            patch["graduation_year"] = int(graduation_year.strip())
+        except ValueError:
+            pass
+    if phone.strip():
+        patch["phone"] = phone.strip()
+    repos.students.patch(student_id, patch)
+    return _redirect(request, "students_page")
+
+
+@router.post("/student/outcome", name="student_outcome_save")
+def student_outcome_save(
+    request: Request,
+    opp_id: str = Form(...),
+    status: str = Form(""),
+    notes: str = Form(""),
+    repos: Repos = Depends(_repos_dep),
+    current_user: AppUser | None = Depends(_current_user),
+) -> RedirectResponse:
+    if current_user is None or current_user.student_id is None:
+        return _redirect(request, "login_page")
+    student = repos.students.get(current_user.student_id)
+    if student is None:
+        return _redirect(request, "student_dashboard")
+    outcomes = [o for o in student.outcomes if o.get("opp_id") != opp_id]
+    if status:
+        outcomes.append({
+            "opp_id": opp_id,
+            "status": status,
+            "notes": notes.strip(),
+            "updated_at": datetime.now(UTC).isoformat(),
+        })
+    repos.students.patch(current_user.student_id, {"outcomes": outcomes})
+    return _redirect(request, "student_dashboard")
 
 
 @router.get("/profile/setup", response_class=HTMLResponse, name="profile_setup_page")

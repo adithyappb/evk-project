@@ -1,0 +1,134 @@
+{
+  "name": "EVkids Personalizer Agent",
+  "version": "1.0.0",
+  "description": "Two-phase agent: first scores every opted-in student against an opportunity using a fast rule-based matcher (no LLM, deterministic), then calls Gemini to write a personalised subject and email body for each student whose match score clears the threshold. Student PII is pseudonymised before leaving the process boundary. All output is persisted as pending-approval DraftMessages — nothing is sent without a human sign-off.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "natural_language_processing/text_generation/copywriting",
+      "id": 10601
+    },
+    {
+      "name": "natural_language_processing/information_retrieval_synthesis/recommendation",
+      "id": 10305
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/personalizer.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": true,
+    "evkids:gemini_model": "gemini-2.0-flash",
+    "evkids:gemini_mode": "structured_output",
+    "evkids:output_schema": "_PersonalisedCopy",
+    "evkids:match_threshold": 0.45,
+    "evkids:pii_handling": "pseudonymised_before_gemini",
+    "evkids:pii_transforms": [
+      "full_name → first_name_only",
+      "student_id → salted_hash",
+      "full_location → region_only"
+    ],
+    "evkids:output_status": "pending_approval",
+    "evkids:human_gate": true,
+    "evkids:scoring_method": "rule_based_hybrid",
+    "evkids:score_components": [
+      "level_gating (hard gate)",
+      "field_of_study_overlap (max +0.45)",
+      "interest_tag_overlap (max +0.45)",
+      "location_heuristic (+0.10)",
+      "opportunity_kind_bump (+0.10)"
+    ]
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Personalizer Agent",
+          "url": "python://evk.agents.personalizer:PersonalizerAgent",
+          "description": "Scores all opted-in students against an opportunity using a rule-based hybrid scorer, then writes a personalised email for each match above threshold using Gemini. Outputs pending-approval DraftMessages. Student PII is pseudonymised before any LLM call.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": true,
+            "requires_llm": true,
+            "human_approval_required": true
+          },
+          "skills": [
+            {
+              "id": "draft_for_opportunity",
+              "name": "Draft Messages for Opportunity",
+              "description": "Given an Opportunity, scores every opted-in student with the rule-based matcher, calls Gemini to write personalised copy for each match above the threshold, and persists DraftMessages with status=pending_approval. Idempotent: skips students who already have a draft for the same opportunity.",
+              "tags": ["personalisation", "matching", "copywriting", "gemini", "pii-safe"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "opportunity_id": {"type": "string"},
+                  "title": {"type": "string"},
+                  "kind": {"type": "string"},
+                  "organization": {"type": "string"},
+                  "summary": {"type": "string"},
+                  "eligibility": {"type": "string"},
+                  "deadline": {"type": "string", "format": "date-time", "nullable": true},
+                  "url": {"type": "string", "nullable": true},
+                  "tags": {"type": "array", "items": {"type": "string"}},
+                  "fields_of_study": {"type": "array", "items": {"type": "string"}},
+                  "min_level": {"type": "string"}
+                },
+                "required": ["opportunity_id", "title", "kind", "organization", "summary"]
+              },
+              "outputSchema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "draft_id": {"type": "string"},
+                    "student_id": {"type": "string"},
+                    "to_email": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "match_score": {"type": "number"},
+                    "match_reasons": {"type": "array", "items": {"type": "string"}},
+                    "status": {"type": "string", "enum": ["pending_approval"]}
+                  }
+                }
+              },
+              "examples": [
+                "Draft personalised messages for Google Summer of Code 2026",
+                "Match students to new scholarship from The Boston Foundation"
+              ]
+            },
+            {
+              "id": "score_match",
+              "name": "Score Student–Opportunity Match",
+              "description": "Rule-based scoring of a single student against a single opportunity. Returns a score in [0, 1] with human-readable reasons. No LLM call — deterministic and fast.",
+              "tags": ["scoring", "matching", "rule-based", "no-llm"],
+              "examples": [
+                "Score CS undergrad against software engineering internship",
+                "Check if 11th-grader qualifies for college-level hackathon"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

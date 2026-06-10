@@ -1,0 +1,103 @@
+{
+  "name": "EVkids Ingestion Agent",
+  "version": "1.0.0",
+  "description": "Pipeline orchestrator: accepts inbound emails from Inkbox (webhook or poll), strips marketing footers, persists a RawEmail audit record, then hands off to the Classifier. Idempotent on Inkbox message ID — safe to replay. Triggers the Personalizer for every opportunity that clears the confidence threshold.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "technology/software_engineering/workflow_orchestration",
+      "id": 20101
+    },
+    {
+      "name": "technology/software_engineering/apis_integration",
+      "id": 20204
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/ingestion.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": false,
+    "evkids:triggers": ["inkbox_webhook:message.received", "poll_unread:scheduled"],
+    "evkids:downstream_agents": ["classifier-agent", "personalizer-agent"],
+    "evkids:idempotency_key": "inkbox_message_id"
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Ingestion Agent",
+          "url": "python://evk.agents.ingestion:IngestionAgent",
+          "description": "Entry point for the EVkids opportunity pipeline. Accepts an inbound email message and orchestrates the full classify → deduplicate → personalise flow.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": true
+          },
+          "skills": [
+            {
+              "id": "handle_inbound",
+              "name": "Handle Inbound Email",
+              "description": "Accepts a single Inkbox InboundMessage, persists a RawEmail record, runs the full classify → deduplicate → personalise pipeline, and returns the annotated RawEmail with extracted opportunity IDs.",
+              "tags": ["ingestion", "pipeline", "email", "orchestration"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "id": {"type": "string", "description": "Inkbox message ID"},
+                  "from_address": {"type": "string"},
+                  "subject": {"type": "string"},
+                  "body_text": {"type": "string"},
+                  "body_html": {"type": "string"},
+                  "received_at": {"type": "string", "format": "date-time"}
+                },
+                "required": ["id", "from_address", "subject"]
+              },
+              "outputSchema": {
+                "type": "object",
+                "properties": {
+                  "raw_email_id": {"type": "string"},
+                  "status": {"type": "string", "enum": ["classified", "skipped", "failed"]},
+                  "extracted_opportunity_ids": {"type": "array", "items": {"type": "string"}}
+                }
+              },
+              "examples": [
+                "Process inbound newsletter from opportunities@boston.gov",
+                "Ingest and classify email with subject 'Summer internship opportunities 2026'"
+              ]
+            },
+            {
+              "id": "poll_unread",
+              "name": "Poll Unread Messages",
+              "description": "Fetches all unread messages from the configured Inkbox inbox, processes each through handle_inbound, and marks them as read. Used as a cron fallback when webhooks are not configured.",
+              "tags": ["polling", "scheduled", "batch"],
+              "examples": [
+                "Run inbox poll on hourly schedule",
+                "Catch up on unprocessed messages after downtime"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

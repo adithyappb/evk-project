@@ -1,0 +1,116 @@
+{
+  "name": "EVkids Classifier Agent",
+  "version": "1.0.0",
+  "description": "Wraps Gemini 2.0 Flash with a structured-output schema to determine whether an email contains student opportunities and, if so, extract them as typed records. Auto-flags records that are uncertain (missing deadline, vague eligibility, no URL) so a human reviewer can clear them before they reach students.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "natural_language_processing/information_extraction/document_parsing",
+      "id": 10401
+    },
+    {
+      "name": "natural_language_processing/classification/document_classification",
+      "id": 10201
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/classifier.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": true,
+    "evkids:gemini_model": "gemini-2.0-flash",
+    "evkids:gemini_mode": "structured_output",
+    "evkids:output_schema": "ClassifierResult",
+    "evkids:confidence_threshold": 0.75,
+    "evkids:pii_handling": "none_in_classifier_input",
+    "evkids:review_triggers": ["deadline_missing", "deadline_past", "url_missing", "eligibility_vague", "low_confidence"]
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Classifier Agent",
+          "url": "python://evk.agents.classifier:ClassifierAgent",
+          "description": "Uses Gemini structured output to classify a raw email as opportunity-bearing or not, extracting typed opportunity records with auto-review flagging for uncertain fields.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": false,
+            "requires_llm": true
+          },
+          "skills": [
+            {
+              "id": "classify",
+              "name": "Classify Email",
+              "description": "Accepts a RawEmail and returns a ClassifierResult: is_opportunity (bool), confidence (0–1), reasoning, and a list of extracted ExtractedOpportunity records. Records with confidence below the configured threshold (default 0.75) are not persisted. Records with uncertain deadline, eligibility, or URL have needs_review=true set automatically.",
+              "tags": ["classification", "extraction", "gemini", "structured-output"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "from_address": {"type": "string"},
+                  "subject": {"type": "string"},
+                  "body_text": {"type": "string"},
+                  "body_html": {"type": "string"},
+                  "received_at": {"type": "string", "format": "date-time"}
+                },
+                "required": ["from_address", "subject"]
+              },
+              "outputSchema": {
+                "type": "object",
+                "properties": {
+                  "is_opportunity": {"type": "boolean"},
+                  "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                  "reasoning": {"type": "string"},
+                  "opportunities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "title": {"type": "string"},
+                        "kind": {"type": "string", "enum": ["scholarship", "internship", "hackathon", "competition", "fellowship", "program", "other"]},
+                        "organization": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "eligibility": {"type": "string"},
+                        "deadline_iso": {"type": "string", "nullable": true},
+                        "url": {"type": "string", "nullable": true},
+                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "fields_of_study": {"type": "array", "items": {"type": "string"}},
+                        "min_level": {"type": "string"},
+                        "needs_review": {"type": "boolean"},
+                        "review_reason": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              },
+              "examples": [
+                "Classify newsletter from boston.gov/summer-jobs",
+                "Extract opportunities from email: 'Apply for the Google Summer of Code by April 2'"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

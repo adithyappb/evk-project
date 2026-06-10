@@ -1,0 +1,115 @@
+{
+  "name": "EVkids Distributor Agent",
+  "version": "1.0.0",
+  "description": "Sends approved DraftMessages to students via their preferred channel (email via Inkbox, WhatsApp via Twilio, or SMS). Enforces the human-approval gate — will never send a draft that is not in status=APPROVED. Respects daily quota limits and per-batch pacing to stay within Gmail and Twilio rate limits.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "technology/software_engineering/apis_integration",
+      "id": 20204
+    },
+    {
+      "name": "technology/communication/notification_delivery",
+      "id": 30201
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/distributor.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": false,
+    "evkids:human_gate": true,
+    "evkids:required_input_status": "approved",
+    "evkids:channels": ["email/inkbox", "whatsapp/twilio", "sms/twilio"],
+    "evkids:channel_selection": "student.preferred_notification_method",
+    "evkids:rate_limits": {
+      "batch_size": 45,
+      "inter_message_delay_seconds": 0.2,
+      "daily_quota": 2000
+    },
+    "evkids:idempotency": "draft_id — duplicate sends are no-ops"
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Distributor Agent",
+          "url": "python://evk.agents.distributor:DistributorAgent",
+          "description": "Sends APPROVED DraftMessages to students via email (Inkbox), WhatsApp (Twilio), or SMS. Enforces daily quota and per-batch rate limits. Never sends without status=APPROVED — the hard delivery gate of the EVkids pipeline.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": true,
+            "requires_llm": false,
+            "human_approval_required": true,
+            "multi_channel": true
+          },
+          "skills": [
+            {
+              "id": "send_approved",
+              "name": "Send Approved Drafts",
+              "description": "Fetches all DraftMessages with status=APPROVED, sends each via the student's preferred channel (email/WhatsApp/SMS), and marks them as sent. Respects daily quota and batch pacing. Returns the list of successfully sent DraftMessages.",
+              "tags": ["delivery", "email", "whatsapp", "sms", "multi-channel", "rate-limited"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "limit": {
+                    "type": "integer",
+                    "description": "Max number of drafts to send in this run (default: batch_size)"
+                  }
+                }
+              },
+              "outputSchema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "draft_id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["sent", "failed"]},
+                    "inkbox_message_id": {"type": "string", "nullable": true},
+                    "sent_at": {"type": "string", "format": "date-time", "nullable": true},
+                    "send_error": {"type": "string", "nullable": true}
+                  }
+                }
+              },
+              "examples": [
+                "Send today's batch of approved opportunity emails",
+                "Flush pending approved WhatsApp messages to students"
+              ]
+            },
+            {
+              "id": "send_one",
+              "name": "Send Single Draft",
+              "description": "Sends a single DraftMessage via the student's preferred channel. Routes to Inkbox (email), Twilio (WhatsApp), or Twilio SMS based on student.preferred_notification_method.",
+              "tags": ["delivery", "single", "email", "whatsapp", "sms"],
+              "examples": [
+                "Immediately send a manually assigned opportunity draft",
+                "Re-send a previously failed draft after fixing the student's phone number"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

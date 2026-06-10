@@ -1,0 +1,96 @@
+{
+  "name": "EVkids Web Scraper Agent",
+  "version": "1.0.0",
+  "description": "Fetches opportunity listings from known public web sources (e.g. boston.gov, youthline), extracts plain text from the HTML, and feeds the result through the same Ingestion → Classifier → Personalizer pipeline as email newsletters. A lightweight supplement to the newsletter ingestion path when a partner doesn't send emails.",
+  "schema_version": "1.0.0",
+  "skills": [
+    {
+      "name": "technology/software_engineering/apis_integration",
+      "id": 20204
+    },
+    {
+      "name": "natural_language_processing/information_extraction/document_parsing",
+      "id": 10401
+    }
+  ],
+  "domains": [
+    {
+      "name": "education/student_services/opportunity_matching",
+      "id": 30101
+    }
+  ],
+  "authors": ["EVkids Engineering"],
+  "created_at": "2026-01-01T00:00:00Z",
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": ["src/evk/agents/scraper.py"]
+    }
+  ],
+  "extensions": {
+    "evkids:deployment": "python_direct",
+    "evkids:gemini_dependency": true,
+    "evkids:gemini_dependency_via": "downstream IngestionAgent → ClassifierAgent",
+    "evkids:human_gate": true,
+    "evkids:scraper_sources": ["boston_gov", "youthline"],
+    "evkids:trigger": "manual (admin dashboard) or scheduled",
+    "evkids:downstream_agents": ["ingestion-agent"]
+  },
+  "modules": [
+    {
+      "id": 203,
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "0.3.0",
+        "card_data": {
+          "name": "EVkids Web Scraper Agent",
+          "url": "python://evk.agents.scraper:WebScraperAgent",
+          "description": "Fetches and strips HTML from a named source in SCRAPER_SOURCES, then feeds the plain text through the standard IngestionAgent pipeline (classify → deduplicate → personalise). Opportunity output enters the review queue for admin approval before reaching students.",
+          "version": "1.0.0",
+          "protocolVersion": "0.3.0",
+          "defaultInputModes": ["application/json"],
+          "defaultOutputModes": ["application/json"],
+          "preferredTransport": "python_direct",
+          "supportsAuthenticatedExtendedCard": false,
+          "capabilities": {
+            "streaming": false,
+            "idempotent": false,
+            "requires_llm": true,
+            "human_approval_required": true
+          },
+          "skills": [
+            {
+              "id": "scrape",
+              "name": "Scrape Web Source",
+              "description": "Fetches the HTML page for a named source key, strips tags to produce clean plain text, constructs a synthetic InboundMessage, and runs it through IngestionAgent.handle_inbound. Returns the count of new opportunities created. Raises ValueError for unknown source keys.",
+              "tags": ["scraping", "web", "html-extraction", "pipeline-trigger"],
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "description": "Key from SCRAPER_SOURCES, e.g. 'boston_gov' or 'youthline'"
+                  }
+                },
+                "required": ["source"]
+              },
+              "outputSchema": {
+                "type": "object",
+                "properties": {
+                  "opportunities_created": {
+                    "type": "integer",
+                    "description": "Number of new opportunity records created (after dedup)"
+                  }
+                }
+              },
+              "examples": [
+                "Scrape latest listings from boston.gov/departments/youth-employment",
+                "Fetch new programs from youthline portal"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
