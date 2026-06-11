@@ -151,10 +151,17 @@ def test_admin_login_reaches_admin_dashboard(ui_client, auth_service):
 def test_student_login_reaches_student_dashboard(ui_client, fake_repos, auth_service, student_undergrad, pending_draft, opp_hackathon):
     fake_repos.students.upsert(student_undergrad)
     fake_repos.opportunities.upsert(opp_hackathon)
-    # Recent outreach only surfaces approved/sent messages — pending drafts are
-    # held behind the human-approval gate and never shown to students.
-    pending_draft.status = DraftStatus.SENT
+    # Pending drafts must stay hidden from students until an admin approves them;
+    # only SENT / APPROVED drafts appear under "Recent outreach".
     fake_repos.drafts.upsert(pending_draft)
+    sent_draft = pending_draft.model_copy(
+        update={
+            "id": f"{pending_draft.id}_sent",
+            "subject": "Your Hack the North invite is live",
+            "status": DraftStatus.SENT,
+        }
+    )
+    fake_repos.drafts.upsert(sent_draft)
     service, notifier = auth_service
     service.ensure_bootstrap()
     _login(ui_client, notifier, student_undergrad.email, get_settings().auth_local_demo_password)
@@ -164,7 +171,8 @@ def test_student_login_reaches_student_dashboard(ui_client, fake_repos, auth_ser
     assert "Student view" in body
     assert student_undergrad.name in body
     assert "Recent outreach" in body
-    assert "love Hack the North" in body
+    assert "Your Hack the North invite is live" in body  # SENT copy is visible
+    assert "love Hack the North" not in body  # pending copy stays hidden
 
 
 def test_ngo_login_reaches_partner_dashboard(ui_client, auth_service):

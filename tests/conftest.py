@@ -69,8 +69,15 @@ def _csrf_client_post() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings_cache() -> None:
-    """Every test starts with a fresh Settings + factory cache."""
+def _reset_settings_cache(tmp_path, monkeypatch) -> None:
+    """Every test starts with a fresh Settings + factory cache.
+
+    LOCAL_DATA_DIR is pointed at a throwaway tmp dir because some routes
+    (e.g. the KPI outcome tracker) write file-backed stores directly via
+    settings.local_data_dir, bypassing the fake repos — without this, test
+    runs append rows into the developer's real ./data store.
+    """
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path / "data"))
     get_settings.cache_clear()
     reset_all_caches()
 
