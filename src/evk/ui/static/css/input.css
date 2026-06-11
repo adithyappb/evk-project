@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+.fade-in {
+  animation: fadeIn 180ms ease both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#toasts > * {
+  animation: slideIn 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+#toasts > .toast-leaving {
+  animation: slideOut 220ms ease forwards;
+  pointer-events: none;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slideOut {
+  to {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+}
+
+[data-toast-progress] {
+  animation: toastProgress var(--toast-ttl, 4500ms) linear forwards;
+}
+
+.toast.is-paused [data-toast-progress] {
+  animation-play-state: paused;
+}
+
+@keyframes toastProgress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.skip-link:focus {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  padding: 0.75rem 1.25rem;
+  border-radius: 9999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid #f1561f;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .fade-in,
+  #toasts > * {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184);
+  border-radius: 999px;
+  border: 2px solid rgb(248 250 252);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139);
+}

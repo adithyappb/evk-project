@@ -34,6 +34,7 @@
       {% endif %}
 
       <form method="post" action="{{ request.url_for('auth_verify') }}" class="mt-8 w-full max-w-sm space-y-6">
+        {% include "_csrf_input.html" %}
         <input type="hidden" name="email" value="{{ email }}" />
         <label class="block text-left">
           <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 text-center">Verification Code</span>
@@ -47,6 +48,7 @@
       <div class="mt-6 flex flex-col items-center gap-3 w-full">
         {# Resend link — posts to resend route which issues a fresh challenge #}
         <form method="post" action="{{ request.url_for('auth_resend') }}">
+        {% include "_csrf_input.html" %}
           <input type="hidden" name="email" value="{{ email }}" />
           <button type="submit" class="text-[13px] font-semibold text-brand-600 underline-offset-2 hover:underline transition">
             Didn't receive it or code expired? Send a new code →

@@ -29,6 +29,7 @@
 
       {% if valid %}
       <form method="post" action="{{ request.url_for('profile_setup_submit') }}" class="mt-8 space-y-6">
+        {% include "_csrf_input.html" %}
         <input type="hidden" name="email" value="{{ email }}" />
         <input type="hidden" name="token" value="{{ token }}" />
 

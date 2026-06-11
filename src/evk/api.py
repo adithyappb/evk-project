@@ -7,7 +7,7 @@ Routes:
 * ``GET  /health``                   — deep health probe (repos + Inkbox + Gemini).
 * ``/admin/*``                       — drafts / opportunities / students / poll.
   Guarded by an **optional** bearer token (``ADMIN_API_TOKEN``); also front
-  behind Cloud Run IAM / IAP in production for defence in depth.
+  behind Cloud Run IAM / IAP in production for defense in depth.
 * ``/``, ``/ui/*``                   — Jinja + HTMX dashboard (see ``evk.ui.routes``).
 """
 
@@ -20,6 +20,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
 from evk.agents.distributor import DistributorAgent
@@ -40,7 +41,9 @@ from evk.models import (
     Student,
     StudentLevel,
 )
+from evk.ui.csrf import CsrfMiddleware
 from evk.ui.routes import router as _ui_router
+from evk.ui.template_env import STATIC_DIR
 
 # --------------------------------------------------------------------------- #
 # Lifespan + app                                                              #
@@ -101,12 +104,13 @@ app = FastAPI(
     title="EVK: Opportunity Pipeline",
     version="0.1.0",
     description=(
-        "Ingest newsletters via Inkbox, classify with Gemini, personalise per student, "
+        "Ingest newsletters via Inkbox, classify with Gemini, personalize per student, "
         "and distribute approved emails back via Inkbox."
     ),
     lifespan=_lifespan,
 )
 
+app.add_middleware(CsrfMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -114,6 +118,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(_ui_router)
 

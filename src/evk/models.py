@@ -207,6 +207,9 @@ class Student(FirestoreDoc):
     phone: str = ""
     preferred_notification_method: str = "email"
     notification_frequency: str = "weekly"
+    # Self-reported application outcomes, one dict per opportunity:
+    # {opp_id, status, notes, updated_at}. Drives the student outcome tracker.
+    outcomes: list[dict] = Field(default_factory=list)
 
     @property
     def school(self) -> str:
@@ -275,7 +278,7 @@ class DraftStatus(StrEnum):
 
 
 class DraftMessage(FirestoreDoc):
-    """A personalised draft email awaiting human approval before being sent."""
+    """A personalized draft email awaiting human approval before being sent."""
 
     student_id: str
     opportunity_id: str
@@ -309,7 +312,7 @@ class UserRole(StrEnum):
 
 
 class AppUser(FirestoreDoc):
-    """A person who can access the EVKids dashboards."""
+    """A person who can access the EVkids dashboards."""
 
     email: EmailStr
     name: str

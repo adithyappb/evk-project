@@ -33,7 +33,7 @@ SCRAPER_SOURCES: dict[str, dict[str, str]] = {
 
 _HEADERS = {
     "User-Agent": (
-        "EVKids-OpportunityBot/1.0 "
+        "EVkids-OpportunityBot/1.0 "
         "(non-profit student outreach; contact: admin@evkids.org)"
     )
 }

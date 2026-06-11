@@ -1,7 +1,7 @@
-"""Personalisation + approval agent.
+"""Personalization + approval agent.
 
 For each new opportunity, score-match every opted-in student. For matches
-above threshold, draft a short personalised email and store it as
+above threshold, draft a short personalized email and store it as
 `DraftMessage` with `status=pending_approval`. Nothing is sent from here.
 """
 
@@ -49,10 +49,40 @@ class Match:
     reasons: list[str]
 
 
+_SOUGHT_TYPE_KINDS: dict[str, set[str]] = {
+    "internship": {"internship", "job"},
+    "summer job": {"internship", "job"},
+    "job training": {"internship", "job", "workshop"},
+    "scholarship": {"scholarship"},
+    "college support": {"scholarship", "fellowship"},
+    "career fair": {"event", "workshop"},
+    "fellowship": {"fellowship", "scholarship"},
+}
+
+
+def _wanted_kinds(student: Student) -> set[str]:
+    kinds: set[str] = set()
+    for raw in student.opportunity_types_sought:
+        kinds |= _SOUGHT_TYPE_KINDS.get(raw.lower(), {raw.lower().replace(" ", "_")})
+    return kinds
+
+
 def score_match(student: Student, opp: Opportunity) -> Match:
     """Hybrid rule-based score in [0, 1] with human-readable reasons."""
     reasons: list[str] = []
     score = 0.0
+
+    # 0. Opportunity-type preference — hard filter when student set preferences.
+    wanted = _wanted_kinds(student)
+    if wanted and opp.kind.value.lower() not in wanted:
+        return Match(
+            student=student,
+            score=0.0,
+            reasons=["not one of your preferred opportunity types"],
+        )
+    if wanted and opp.kind.value.lower() in wanted:
+        score += 0.15
+        reasons.append(f"matches your preferred type ({opp.kind.value})")
 
     # 1. Level gating — if student is below required level, it's not a match.
     if _LEVEL_RANK[student.level] < _LEVEL_RANK[opp.min_level]:
@@ -101,16 +131,16 @@ def score_match(student: Student, opp: Opportunity) -> Match:
 
 
 # --------------------------------------------------------------------------- #
-# Personalised copywriting via Gemini                                         #
+# Personalized copywriting via Gemini                                         #
 # --------------------------------------------------------------------------- #
 
 
-class _PersonalisedCopy(BaseModel):
-    """Structured personalised-email output."""
+class _PersonalizedCopy(BaseModel):
+    """Structured personalized-email output."""
 
     model_config = ConfigDict(extra="forbid")
 
-    subject: str = Field(description="Personalised subject line, under 80 chars.")
+    subject: str = Field(description="Personalized subject line, under 80 chars.")
     body_text: str = Field(description="Plain-text email body. Friendly, concise, 90-140 words.")
     body_html: str = Field(
         description=(
@@ -138,7 +168,7 @@ Write a short, warm, non-salesy email in second person ("you"):
 
 
 class PersonalizerAgent:
-    """Score students, draft personalised messages, persist as pending approvals."""
+    """Score students, draft personalized messages, persist as pending approvals."""
 
     def __init__(
         self,
@@ -204,11 +234,11 @@ class PersonalizerAgent:
             status=DraftStatus.PENDING_APPROVAL,
         )
 
-    def _write_copy(self, *, match: Match, opp: Opportunity) -> _PersonalisedCopy:
+    def _write_copy(self, *, match: Match, opp: Opportunity) -> _PersonalizedCopy:
         prompt = _render_copy_prompt(student=match.student, opp=opp, reasons=match.reasons)
         return self._gemini.generate_structured(
             prompt=prompt,
-            schema=_PersonalisedCopy,
+            schema=_PersonalizedCopy,
             system_instruction=_COPY_SYSTEM,
             temperature=0.6,
             max_output_tokens=1024,
@@ -231,7 +261,7 @@ def _render_copy_prompt(*, student: Student, opp: Opportunity, reasons: list[str
         "OPPORTUNITY\n"
         f"- Title: {opp.title}\n"
         f"- Kind: {opp.kind.value}\n"
-        f"- Organisation: {opp.organization}\n"
+        f"- Organization: {opp.organization}\n"
         f"- Summary: {opp.summary}\n"
         f"- Eligibility: {opp.eligibility or 'n/a'}\n"
         f"- Location: {opp.location or 'n/a'}\n"

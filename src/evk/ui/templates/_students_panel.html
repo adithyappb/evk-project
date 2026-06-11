@@ -38,6 +38,7 @@
             </a>
             {% if not s.opted_in %}
             <form method="post" action="{{ request.url_for('student_activate', student_id=s.id) }}" class="inline">
+        {% include "_csrf_input.html" %}
               <button type="submit"
                 class="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-100 transition">
                 Activate →
@@ -45,6 +46,72 @@
             </form>
             {% endif %}
           </div>
+
+          {# ── Staff edit: school / level / graduation year (NGO admin + admin) ── #}
+          <details class="group/edit rounded-2xl border border-slate-200 bg-white">
+            <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:text-brand-700">
+              <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit school &amp; level
+              <svg class="ml-auto h-3.5 w-3.5 transition-transform group-open/edit:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </summary>
+            <form method="post" action="{{ request.url_for('student_admin_edit', student_id=s.id) }}"
+                  class="border-t border-slate-100 px-3 py-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {% include "_csrf_input.html" %}
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Name</label>
+                <input type="text" name="name" value="{{ s.name }}"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">School</label>
+                <input type="text" name="school_name" value="{{ s.school }}"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Level</label>
+                <select name="level"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100">
+                  {% for lv in levels %}
+                  <option value="{{ lv.value }}" {% if s.level.value == lv.value %}selected{% endif %}>{{ lv | level_label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Graduation year</label>
+                <input type="number" name="graduation_year" value="{{ s.graduation_year or '' }}" min="2000" max="2100" placeholder="e.g. 2027"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Location</label>
+                <input type="text" name="location" value="{{ s.location }}"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Phone</label>
+                <input type="tel" name="phone" value="{{ s.phone }}"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Bio</label>
+                <textarea name="bio" rows="2"
+                  class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100 resize-none">{{ s.bio }}</textarea>
+              </div>
+              <div class="sm:col-span-2 flex flex-wrap items-center gap-4 pt-1">
+                <label class="flex items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" name="boston_resident" value="on" {% if s.boston_resident %}checked{% endif %} class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600"/>
+                  Boston resident
+                </label>
+                <label class="flex items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" name="first_generation" value="on" {% if s.first_generation %}checked{% endif %} class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600"/>
+                  First-generation
+                </label>
+                <button type="submit"
+                  class="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700">
+                  Save
+                </button>
+              </div>
+            </form>
+          </details>
 
           {# Profile fields in a 2-col grid #}
           <dl class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 text-xs">

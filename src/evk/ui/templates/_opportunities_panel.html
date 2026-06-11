@@ -1,8 +1,8 @@
 <section id="opportunities" class="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
   <div class="flex items-baseline justify-between gap-3">
     <div>
-      <h2 class="text-lg font-semibold tracking-tight text-slate-950">Opportunities</h2>
-      <p class="mt-0.5 text-sm leading-6 text-slate-600">Soonest deadlines first, with direct links to the source when available.</p>
+      <h2 class="text-lg font-semibold tracking-tight text-slate-950">{% if student_friendly is defined and student_friendly %}Opportunities picked for you{% else %}Opportunities{% endif %}</h2>
+      <p class="mt-0.5 text-sm leading-6 text-slate-600">{% if student_friendly is defined and student_friendly %}Sorted by deadline — tap any row to see details and apply.{% else %}Soonest deadlines first, with direct links to the source when available.{% endif %}</p>
     </div>
     <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium tabular-nums text-slate-600">{{ opportunities|length }} tracked</span>
   </div>
@@ -21,16 +21,16 @@
   </div>
 
   <ul id="opportunities-list" class="mt-5 space-y-2">
+    {% set route_name = detail_route if detail_route is defined else 'opportunity_detail' %}
     {% for o in opportunities %}
     <li>
       <a
-        href="{{ request.url_for('opportunity_detail', opp_id=o.inner.id) }}"
+        href="{{ request.url_for(route_name, opp_id=o.inner.id) }}"
         class="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm transition hover:border-slate-200 hover:bg-white hover:shadow-sm"
       >
         <div class="w-16 shrink-0 text-center">
           {% if o.days_until is not none %}
-          {% set c = 'rose' if o.days_until <= 7 else ('amber' if o.days_until <= 30 else 'emerald') %}
-          <div class="text-sm font-semibold text-{{ c }}-600 tabular-nums">{{ o.days_until }}d</div>
+          <div class="text-sm font-semibold tabular-nums {% if o.days_until <= 7 %}text-rose-600{% elif o.days_until <= 30 %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ o.days_until }}d</div>
           <div class="text-[9px] uppercase tracking-widest text-slate-500">left</div>
           {% elif o.deadline %}
           <div class="text-xs font-medium text-slate-500">past</div>
@@ -41,7 +41,7 @@
         </div>
         <div class="min-w-0 flex-1">
           <div class="truncate font-medium text-slate-900 transition group-hover:text-brand-700">{{ o.title }}</div>
-          <div class="truncate text-xs text-slate-500">{{ o.kind.value }} · {{ o.organization }}</div>
+          <div class="truncate text-xs text-slate-500">{{ o.kind.value }} · {{ o.organization }}{% if o.match_score is not none %} · <span class="font-semibold text-emerald-700">{{ (o.match_score * 100)|int }}% fit</span>{% endif %}</div>
         </div>
         <svg class="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </a>

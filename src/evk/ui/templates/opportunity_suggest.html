@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}EVkids · Suggest an Opportunity{% endblock %}
+{% block content %}
+
+<section class="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50 px-6 py-7 shadow-sm">
+  <a href="{{ request.url_for('student_dashboard') }}" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-950">
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Back to dashboard
+  </a>
+  <div class="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+    Suggest an opportunity
+  </div>
+  <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Found something worth sharing?</h1>
+  <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Tell us about an opportunity you came across. Our team reviews every suggestion before it reaches other students.</p>
+</section>
+
+<form method="POST" action="{{ request.url_for('opportunity_suggest_submit') }}"
+      class="mt-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        {% include "_csrf_input.html" %}
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Title</label>
+      <input type="text" name="title" required placeholder="e.g. Summer Research Fellowship"
+        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Organization</label>
+      <input type="text" name="organization" placeholder="Who is offering it?"
+        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+    </div>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2">
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Kind</label>
+      <select name="kind" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100">
+        {% for k in kinds %}
+        <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-slate-600 mb-1.5">Application deadline <span class="font-normal text-slate-400">(if known)</span></label>
+      <input type="date" name="deadline_str"
+        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Link <span class="font-normal text-slate-400">(where to learn more / apply)</span></label>
+    <input type="url" name="url" placeholder="https://..."
+      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100"/>
+  </div>
+
+  <div>
+    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Why is it a good fit?</label>
+    <textarea name="summary" rows="3" placeholder="A sentence or two about what it offers."
+      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100 resize-none"></textarea>
+  </div>
+
+  <div class="flex flex-wrap gap-2 pt-1">
+    <button type="submit"
+      class="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700">
+      Submit for review
+    </button>
+    <a href="{{ request.url_for('student_dashboard') }}"
+       class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300">
+      Cancel
+    </a>
+  </div>
+</form>
+
+{% endblock %}

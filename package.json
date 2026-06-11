@@ -1,0 +1,10 @@
+{
+  "name": "evk-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i ./src/evk/ui/static/css/input.css -o ./src/evk/ui/static/css/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

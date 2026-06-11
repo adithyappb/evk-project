@@ -1,28 +1,79 @@
+# =============================================================================
+# EVkids — .gitignore
+#
+# Keep build output, dependencies, and local runtime data OUT of git.
+# Committing node_modules / .next bloats .git/objects and on OneDrive-synced
+# paths Windows + Git GC will spam "Deletion of directory failed (y/n)".
+# =============================================================================
+
 # --- Python ---
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
+*.egg
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
+*.manifest
+*.spec
 
-# --- Virtualenvs / build artifacts ---
+# --- Virtualenvs / Python packaging ---
 .venv/
+venv/
+ENV/
 dist/
 build/
+*.whl
+
+# --- Node / Next.js (never commit dependencies or build output) ---
+node_modules/
+**/node_modules/
+.next/
+out/
+.vercel/
+.turbo/
+*.tsbuildinfo
+
+# Legacy Vite dashboard (keep source; ignore install + build output)
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
 
 # --- Tooling caches ---
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+*.cover
+.nyc_output/
+.eslintcache
+*.cache
 
-# --- Editors / OS ---
+# --- Editors / OS / OneDrive noise ---
 .DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
 .idea/
 .vscode/
+*.code-workspace
+.claude/worktrees/
 
-# --- Secrets & local state (NEVER commit) ---
-# Block every local env file variant, then whitelist the shareable example.
-# `.env.example` is the committed template; `.env` must stay local.
+# OneDrive / macOS duplicate filenames
+*\ copy/
+*\ copy.*
+* copy/
+~$*
+
+# --- Secrets & local env (NEVER commit) ---
+# Whitelist only the shareable template.
 .env
 .env.*
 !.env.example
@@ -30,12 +81,26 @@ credentials.txt
 secrets/
 *.pem
 *.key
+*.p12
+*.pfx
 service-account*.json
+*-credentials.json
+firebase-adminsdk*.json
 
-# --- Runtime data (local-mode JSON store + send logs) ---
+# --- Runtime / local data ---
 data/
+*.log
+*.sqlite
+*.sqlite3
+*.db
 
-# --- Backup copies (macOS Finder duplicates) ---
-*\ copy/
-*\ copy.*
-.claude/worktrees/
+# --- Optional local workbook (large; keep path in .env only) ---
+*.xlsx
+!seed/**/*.xlsx
+
+# --- Supabase local CLI state ---
+supabase/.branches/
+supabase/.temp/
+
+# --- Docker / misc local ---
+*.local

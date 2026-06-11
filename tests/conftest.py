@@ -38,6 +38,36 @@ from tests.fakes import (
 )
 
 
+from fastapi.testclient import TestClient
+
+from evk.ui.csrf import CSRF_COOKIE, CSRF_FORM_FIELD, CSRF_HEADER
+
+
+@pytest.fixture(autouse=True)
+def _csrf_client_post() -> None:
+    """Inject CSRF token into TestClient form POSTs (matches browser double-submit cookie)."""
+    original = TestClient.post
+
+    def post(self, url, *args, data=None, **kwargs):
+        token = self.cookies.get(CSRF_COOKIE)
+        if not token:
+            self.get("/")
+            token = self.cookies.get(CSRF_COOKIE, "")
+        if data is not None and isinstance(data, dict):
+            enriched = dict(data)
+            enriched.setdefault(CSRF_FORM_FIELD, token)
+            data = enriched
+        headers = dict(kwargs.get("headers") or {})
+        if token:
+            headers.setdefault(CSRF_HEADER, token)
+        kwargs["headers"] = headers
+        return original(self, url, *args, data=data, **kwargs)
+
+    TestClient.post = post  # type: ignore[method-assign]
+    yield
+    TestClient.post = original  # type: ignore[method-assign]
+
+
 @pytest.fixture(autouse=True)
 def _reset_settings_cache() -> None:
     """Every test starts with a fresh Settings + factory cache."""
