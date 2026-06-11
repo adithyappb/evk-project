@@ -87,7 +87,7 @@ class DistributorAgent:
             student = self._repos.students.get(draft.student_id)
 
         method = getattr(student, "preferred_notification_method", "email") if student else "email"
-        phone = getattr(student, "phone_number", None) if student else None
+        phone = student.phone if student else None
 
         message_id: str = ""
 

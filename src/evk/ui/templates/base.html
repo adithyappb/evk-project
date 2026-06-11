@@ -3,27 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}EVKids · Opportunity Access{% endblock %}</title>
+  <meta name="theme-color" content="#f1561f" />
+  <meta name="description" content="EVkids helps students discover scholarships, internships, and programs matched to their goals — reviewed by real people before anything is sent." />
+  <title>{% block title %}EVkids · Opportunity Access{% endblock %}</title>
+  {% if use_local_tailwind() %}
+  <link rel="stylesheet" href="{{ tailwind_css_url() }}"/>
+  {% else %}
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"
-          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
-          crossorigin="anonymous"></script>
-  <script>
-    document.body.addEventListener('htmx:beforeRequest', (e) => {
-      const target = e.target;
-      if (target) {
-        target.style.opacity = '0.7';
-        target.style.pointerEvents = 'none';
-      }
-    });
-    document.body.addEventListener('htmx:afterRequest', (e) => {
-      const target = e.target;
-      if (target) {
-        target.style.opacity = '';
-        target.style.pointerEvents = '';
-      }
-    });
-  </script>
   <script>
     tailwind.config = {
       theme: {
@@ -54,11 +40,36 @@
       }
     }
   </script>
+  {% endif %}
+  <script src="https://unpkg.com/htmx.org@1.9.12"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+          crossorigin="anonymous"></script>
+  <script>
+    document.body.addEventListener('htmx:beforeRequest', (e) => {
+      const token = document.querySelector('meta[name="csrf-token"]')?.content;
+      if (token && e.detail.headers) {
+        e.detail.headers['X-CSRF-Token'] = token;
+      }
+      const target = e.target;
+      if (target) {
+        target.style.opacity = '0.7';
+        target.style.pointerEvents = 'none';
+      }
+    });
+    document.body.addEventListener('htmx:afterRequest', (e) => {
+      const target = e.target;
+      if (target) {
+        target.style.opacity = '';
+        target.style.pointerEvents = '';
+      }
+    });
+  </script>
   <link rel="preconnect" href="https://rsms.me/">
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&display=swap" rel="stylesheet">
+  {% if not use_local_tailwind() %}
   <style>
     html {
       font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
@@ -96,6 +107,39 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0); }
     }
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: auto;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+    .skip-link:focus {
+      position: fixed;
+      left: 1rem;
+      top: 1rem;
+      z-index: 100;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      padding: 0.75rem 1.25rem;
+      border-radius: 9999px;
+      background: #0f172a;
+      color: #fff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      box-shadow: 0 10px 40px rgba(15, 23, 42, 0.25);
+    }
+    :focus-visible {
+      outline: 2px solid #f1561f;
+      outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .fade-in, #toasts > * { animation: none !important; }
+      * { transition-duration: 0.01ms !important; }
+    }
     *::-webkit-scrollbar {
       width: 10px;
       height: 10px;
@@ -109,11 +153,14 @@
       background: rgb(100 116 139);
     }
   </style>
+  {% endif %}
+  <meta name="csrf-token" content="{{ request.cookies.get('evk_csrf', '') if request is defined else '' }}"/>
 </head>
 <body class="min-h-full bg-[radial-gradient(circle_at_top,_rgba(255,113,56,0.08),_transparent_35%),linear-gradient(180deg,#fffdfb_0%,#f8fafc_46%,#eef2f7_100%)] font-sans text-slate-800 antialiased">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
   <div class="min-h-full">
     <header class="sticky top-0 z-30 border-b border-white/70 bg-white/88 backdrop-blur-xl">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <a href="{{ request.url_for('landing') if request is defined else '/' }}" class="flex items-center gap-3">
           <div class="grid h-12 w-12 place-items-center rounded-[1.35rem] bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-lg shadow-brand-200/80">
             <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">
@@ -130,33 +177,41 @@
 
         <div class="flex items-center gap-2 text-xs">
           {% if current_user %}
-          <nav class="hidden items-center gap-1 sm:flex">
+          <button type="button" id="mobile-nav-toggle" class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 sm:hidden" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <nav class="hidden items-center gap-1 sm:flex" aria-label="Main navigation">
             {% if current_user.role.value == 'admin' %}
             <a href="{{ request.url_for('drafts_page', status_filter='pending_approval') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Review Queue</a>
-            <a href="{{ request.url_for('opportunities_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Catalogue</a>
+            <a href="{{ request.url_for('opportunities_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Catalog</a>
             <a href="{{ request.url_for('students_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Students</a>
             <a href="{{ request.url_for('admin_kpi') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">KPI</a>
             {% elif current_user.role.value == 'ngo_admin' %}
             <a href="{{ request.url_for('ngo_dashboard') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Dashboard</a>
             <a href="{{ request.url_for('opportunities_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Opportunities</a>
             {% elif current_user.role.value == 'student' %}
-            <a href="{{ request.url_for('student_dashboard') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Dashboard</a>
+            <a href="{{ request.url_for('student_dashboard') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">My dashboard</a>
+            <a href="{{ request.url_for('student_profile_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Profile</a>
+            <a href="{{ request.url_for('opportunity_suggest_page') }}" class="rounded-full border border-brand-200 bg-brand-50 px-3 py-1.5 font-bold text-brand-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md active:scale-95">Suggest</a>
             {% endif %}
           </nav>
           {% endif %}
-          <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-medium text-emerald-700">
+          {% if not current_user or current_user.role.value == 'admin' %}
+          <span class="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-medium text-emerald-700 md:inline-flex">
             <span class="relative flex h-2 w-2">
               <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75"></span>
               <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
             </span>
             {{ wiring.mode if wiring is defined else 'local' }} mode
           </span>
+          {% endif %}
           {% if current_user %}
           <div class="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600 shadow-sm sm:inline-flex">
             <span class="font-bold text-slate-900">{{ current_user.name }}</span>
             <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase font-bold tracking-[0.2em] text-slate-500">{{ current_user.role.value.replace('_', ' ') }}</span>
           </div>
           <form method="post" action="{{ request.url_for('logout') }}">
+        {% include "_csrf_input.html" %}
             <button type="submit" class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md hover:-translate-y-0.5 active:scale-95">
               Sign out
             </button>
@@ -173,9 +228,28 @@
           {% endif %}
         </div>
       </div>
+      {% if current_user %}
+      <nav id="mobile-nav" class="hidden border-t border-slate-100 bg-white/95 px-4 py-3 sm:hidden" aria-label="Mobile navigation">
+        <div class="flex flex-col gap-1">
+          {% if current_user.role.value == 'admin' %}
+          <a href="{{ request.url_for('drafts_page', status_filter='pending_approval') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Review Queue</a>
+          <a href="{{ request.url_for('opportunities_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Catalog</a>
+          <a href="{{ request.url_for('students_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Students</a>
+          <a href="{{ request.url_for('admin_kpi') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">KPI</a>
+          {% elif current_user.role.value == 'ngo_admin' %}
+          <a href="{{ request.url_for('ngo_dashboard') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Dashboard</a>
+          <a href="{{ request.url_for('opportunities_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Opportunities</a>
+          {% elif current_user.role.value == 'student' %}
+          <a href="{{ request.url_for('student_dashboard') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My dashboard</a>
+          <a href="{{ request.url_for('student_profile_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My profile</a>
+          <a href="{{ request.url_for('opportunity_suggest_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-brand-700 hover:bg-brand-50">Suggest an opportunity</a>
+          {% endif %}
+        </div>
+      </nav>
+      {% endif %}
     </header>
 
-    <main class="mx-auto max-w-6xl px-6 py-8">
+    <main id="main-content" class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {% block content %}{% endblock %}
     </main>
 
@@ -285,6 +359,16 @@
       document.body.addEventListener('htmx:afterSwap', armAll);
       document.body.addEventListener('htmx:oobAfterSwap', armAll);
       document.addEventListener('DOMContentLoaded', armAll);
+
+      const mobileToggle = document.getElementById('mobile-nav-toggle');
+      const mobileNav = document.getElementById('mobile-nav');
+      if (mobileToggle && mobileNav) {
+        mobileToggle.addEventListener('click', () => {
+          const open = mobileNav.classList.toggle('hidden') === false;
+          mobileToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+          mobileToggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        });
+      }
 
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {

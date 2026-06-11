@@ -1,4 +1,4 @@
-"""Authentication and MFA helpers for EVKids."""
+"""Authentication and MFA helpers for EVkids."""
 
 from __future__ import annotations
 
@@ -64,9 +64,9 @@ def _demo_users(settings: Settings) -> list[dict[str, str]]:
         {
             "id": "user_admin_evk",
             "email": "admin@evkids.org",
-            "name": "EVKids Admin",
+            "name": "EVkids Admin",
             "role": UserRole.ADMIN.value,
-            "organization": "EVKids",
+            "organization": "EVkids",
             "password": settings.auth_local_demo_password,
         },
         {
@@ -74,7 +74,7 @@ def _demo_users(settings: Settings) -> list[dict[str, str]]:
             "email": "partner@evkids.org",
             "name": "Community Partner",
             "role": UserRole.NGO_ADMIN.value,
-            "organization": "EVKids Partner Network",
+            "organization": "EVkids Partner Network",
             "password": settings.auth_local_demo_password,
         },
     ]
@@ -234,7 +234,7 @@ class AuthService:
         if user is None:
             raise AuthError("No account found for that email yet.")
         if not user.is_active:
-            raise AuthError("This account is inactive. Ask an EVKids admin to reactivate it.")
+            raise AuthError("This account is inactive. Ask an EVkids admin to reactivate it.")
         if not verify_access_key(
             access_key,
             salt=user.access_key_salt,

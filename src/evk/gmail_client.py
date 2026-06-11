@@ -215,9 +215,9 @@ class GmailEmailClient:
         """Send a verification / OTP email via Gmail SMTP."""
         self.send(
             to=[to],
-            subject="EVKids verification code",
+            subject="EVkids verification code",
             body_text=(
-                f"Your EVKids verification code is {code}. "
+                f"Your EVkids verification code is {code}. "
                 f"It expires in {ttl_minutes} minutes."
             ),
         )

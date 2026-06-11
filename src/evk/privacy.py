@@ -29,7 +29,7 @@ _AGE_BANDS: Final[tuple[tuple[int, int, str], ...]] = (
     (19, 200, "19+"),
 )
 
-# Country / region tokens we recognise at the *tail* of a location string.
+# Country / region tokens we recognize at the *tail* of a location string.
 # The logic is conservative: last comma-separated non-empty chunk is the region.
 _DEFAULT_REGION = "—"
 

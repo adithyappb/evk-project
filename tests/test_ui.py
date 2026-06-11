@@ -94,8 +94,8 @@ def test_register_page_renders_new_user_only(ui_client):
     response = ui_client.get("/register")
     assert response.status_code == 200
     body = response.text
-    assert "New user" in body
-    assert "Create your account." in body
+    assert "New student account" in body
+    assert "Create your account to track opportunities" in body
     assert "Full name" in body
     assert "Enter your details to continue." not in body
     assert "Existing user" not in body
@@ -108,7 +108,7 @@ def test_signup_creates_user_and_shows_verify(ui_client, fake_repos, auth_servic
         data={
             "name": "Jordan Rivera",
             "email": "jordan@example.org",
-            "role": "ngo_admin",
+            "role": "student",
             "organization": "City Youth Lab",
             "access_key": "StrongerPass123",
         },
@@ -116,7 +116,25 @@ def test_signup_creates_user_and_shows_verify(ui_client, fake_repos, auth_servic
     assert response.status_code == 200
     assert "verification code" in response.text.lower()
     assert fake_repos.users.get_by_email("jordan@example.org") is not None
+    user = fake_repos.users.get_by_email("jordan@example.org")
+    assert user is not None
+    assert user.role.value == "student"
     assert "jordan@example.org" in notifier.codes
+
+
+def test_signup_rejects_staff_roles(ui_client, auth_service):
+    response = ui_client.post(
+        "/auth/signup",
+        data={
+            "name": "Bad Actor",
+            "email": "bad@example.org",
+            "role": "admin",
+            "organization": "X",
+            "access_key": "StrongerPass123",
+        },
+    )
+    assert response.status_code == 400
+    assert "students only" in response.text.lower()
 
 
 def test_admin_login_reaches_admin_dashboard(ui_client, auth_service):

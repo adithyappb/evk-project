@@ -641,7 +641,7 @@ class TestStudentProfileManagement:
         assert updated.bio == "Updated bio with new interests."
 
     def test_profile_save_redirects_to_dashboard(self, ui_client, fake_repos, auth_service):
-        """After saving profile, student is redirected back to their dashboard."""
+        """After saving profile, student is redirected back to profile with confirmation."""
         student = _make_student()
         self._login_student(ui_client, fake_repos, auth_service, student)
         resp = ui_client.post(
@@ -653,11 +653,13 @@ class TestStudentProfileManagement:
                 "preferred_notification_method": "email",
                 "phone": "",
                 "bio": "",
+                "opted_in": "on",
             },
             follow_redirects=False,
         )
         assert resp.status_code == 303
-        assert "student" in resp.headers.get("location", "")
+        assert "/profile" in resp.headers.get("location", "")
+        assert "flash=" in resp.headers.get("location", "")
 
 
 # ===========================================================================

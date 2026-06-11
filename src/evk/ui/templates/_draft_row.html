@@ -8,7 +8,6 @@
   'failed': ('bg-rose-900/40 text-rose-300 ring-rose-800/60', 'failed'),
 } %}
 {% set badge, label = status_style.get(status, ('bg-slate-800 text-slate-300 ring-slate-700', status)) %}
-{% set score_color = 'emerald' if d.match_score >= 0.7 else ('amber' if d.match_score >= 0.5 else 'slate') %}
 
 <li
   id="draft-{{ d.id }}"
@@ -16,8 +15,8 @@
 >
   <div class="flex items-start gap-4 p-5">
     <div class="shrink-0 flex w-14 flex-col items-center gap-1">
-      <div class="relative grid h-12 w-12 place-items-center rounded-full bg-white ring-2 ring-{{ score_color }}-200">
-        <span class="text-sm font-semibold text-{{ score_color }}-600 tabular-nums">{{ '%.2f'|format(d.match_score) }}</span>
+      <div class="relative grid h-12 w-12 place-items-center rounded-full bg-white ring-2 {% if d.match_score >= 0.7 %}ring-emerald-200{% elif d.match_score >= 0.5 %}ring-amber-200{% else %}ring-slate-200{% endif %}">
+        <span class="text-sm font-semibold tabular-nums {% if d.match_score >= 0.7 %}text-emerald-600{% elif d.match_score >= 0.5 %}text-amber-600{% else %}text-slate-600{% endif %}">{{ '%.2f'|format(d.match_score) }}</span>
       </div>
       <span class="text-[9px] uppercase tracking-widest text-slate-500">score</span>
     </div>

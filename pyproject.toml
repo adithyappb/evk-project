@@ -62,7 +62,8 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 # FastAPI's Depends(...) default-arg pattern is idiomatic.
 "src/evk/api.py" = ["B008"]
-"src/evk/ui/routes.py" = ["B008"]
+"src/evk/ui/deps.py" = ["B008"]
+"src/evk/ui/routes/*.py" = ["B008"]
 # Tests deliberately assert on Exception subclasses for brevity.
 "tests/*.py" = ["B017"]
 

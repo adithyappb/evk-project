@@ -2,83 +2,105 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Your EVkids picks — {{ week_key }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your EVkids picks — week {{ week_key }}</title>
 </head>
-<body style="margin:0;padding:0;background:#f7f8fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#0f172a;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+    {{ picks|length }} opportunities matched for you this week — reviewed by EVkids before sending.
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:28px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0"
-               style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,.06);">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
           <tr>
-            <td style="padding:28px 32px 8px 32px;">
-              <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#64748b;">EVkids · week {{ week_key }}</div>
-              <h1 style="margin:6px 0 0 0;font-size:22px;line-height:1.2;color:#0f172a;">
-                Hi {{ student.name.split(' ')[0] }}, here are your top picks
-              </h1>
-              <p style="margin:8px 0 0 0;color:#475569;font-size:14px;line-height:1.55;">
-                We reviewed the latest opportunities and ranked them against your profile
-                ({{ student.level.value.replace('_',' ') }}, {{ ', '.join(student.fields_of_study) or 'open fields' }}).
-                The closer to the top, the stronger the fit.
-              </p>
+            <td style="padding-bottom:16px;text-align:center;">
+              <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:#fff6ef;color:#d43f12;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">EVkids · week {{ week_key }}</div>
             </td>
           </tr>
-
-          {% for match, opp in picks %}
           <tr>
-            <td style="padding:12px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                     style="border:1px solid #e2e8f0;border-radius:12px;">
+            <td style="background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,.08);">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="padding:16px 18px;">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
-                      <div style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;">
-                        {{ opp.kind.value }} · {{ opp.organization }}
-                      </div>
-                      <div style="font-size:11px;color:#0ea5e9;font-weight:600;">
-                        match {{ (match.score * 100) | round(0, 'floor') | int }}%
-                      </div>
+                  <td style="padding:32px 32px 12px 32px;background:linear-gradient(180deg,#fffdfb 0%,#ffffff 100%);">
+                    <h1 style="margin:0;font-size:26px;line-height:1.25;color:#0f172a;font-weight:700;">
+                      Hi {{ student.name.split(' ')[0] }} — here are your top picks
+                    </h1>
+                    <p style="margin:12px 0 0 0;color:#475569;font-size:15px;line-height:1.65;">
+                      We read through the latest opportunities and ranked them for <strong style="color:#0f172a;">you</strong>
+                      ({{ student.level.value.replace('_',' ') }}, {{ ', '.join(student.fields_of_study) or 'your interests' }}).
+                      A real person checked this list before it reached your inbox.
+                    </p>
+                  </td>
+                </tr>
+
+                {% for match, opp in picks %}
+                <tr>
+                  <td style="padding:10px 24px 0 24px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+                      <tr>
+                        <td style="padding:18px 20px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;font-weight:600;">
+                                {{ opp.kind.value }} · {{ opp.organization }}
+                              </td>
+                              <td align="right" style="font-size:12px;color:#059669;font-weight:700;white-space:nowrap;">
+                                {{ (match.score * 100) | round(0, 'floor') | int }}% match
+                              </td>
+                            </tr>
+                          </table>
+                          <div style="margin-top:8px;font-size:18px;font-weight:700;line-height:1.35;color:#0f172a;">
+                            {% if opp.url %}
+                              <a href="{{ opp.url }}" style="color:#0f172a;text-decoration:none;">{{ opp.title }}</a>
+                            {% else %}
+                              {{ opp.title }}
+                            {% endif %}
+                          </div>
+                          <p style="margin:8px 0 0 0;font-size:14px;color:#475569;line-height:1.6;">{{ opp.summary }}</p>
+                          <p style="margin:12px 0 0 0;font-size:13px;color:#64748b;">
+                            {% if opp.deadline %}
+                              <strong style="color:#be123c;">Apply by {{ opp.deadline.date().isoformat() }}</strong>
+                            {% else %}
+                              Rolling deadline — apply when you are ready
+                            {% endif %}
+                            {% if opp.location %} · {{ opp.location }}{% endif %}
+                          </p>
+                          <p style="margin:10px 0 0 0;font-size:13px;color:#0f766e;line-height:1.5;">
+                            <strong>Why it fits you:</strong> {{ match.reasons | join(' · ') }}
+                          </p>
+                          {% if opp.url %}
+                          <div style="margin-top:16px;">
+                            <a href="{{ opp.url }}"
+                               style="display:inline-block;padding:12px 20px;border-radius:999px;background:#f1561f;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(241,86,31,.35);">
+                              View &amp; apply →
+                            </a>
+                          </div>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                {% endfor %}
+
+                <tr>
+                  <td style="padding:24px 32px 32px 32px;">
+                    <div style="border-radius:14px;background:#f8fafc;padding:16px 18px;">
+                      <p style="margin:0;font-size:13px;line-height:1.65;color:#475569;">
+                        <strong style="color:#0f172a;">Need help?</strong> Reply to this email — a real EVkids coordinator will read it.
+                        Wrong fit? Update your interests in the app and we will tune next week's picks.
+                      </p>
                     </div>
-                    <div style="margin-top:4px;font-size:16px;font-weight:600;color:#0f172a;">
-                      {% if opp.url %}
-                        <a href="{{ opp.url }}" style="color:#0f172a;text-decoration:none;">{{ opp.title }}</a>
-                      {% else %}
-                        {{ opp.title }}
-                      {% endif %}
-                    </div>
-                    <div style="margin-top:6px;font-size:13px;color:#475569;line-height:1.5;">
-                      {{ opp.summary }}
-                    </div>
-                    <div style="margin-top:10px;font-size:12px;color:#64748b;">
-                      {% if opp.deadline %}Deadline: <strong style="color:#0f172a;">{{ opp.deadline.date().isoformat() }}</strong>{% else %}Rolling deadline{% endif %}
-                      {% if opp.location %} · {{ opp.location }}{% endif %}
-                    </div>
-                    <div style="margin-top:10px;font-size:12px;color:#0f766e;">
-                      Why it fits: {{ match.reasons | join(' · ') }}
-                    </div>
-                    {% if opp.url %}
-                    <div style="margin-top:12px;">
-                      <a href="{{ opp.url }}"
-                         style="display:inline-block;padding:8px 14px;border-radius:8px;background:#0f172a;color:#ffffff;text-decoration:none;font-size:13px;font-weight:500;">
-                        View opportunity
-                      </a>
-                    </div>
-                    {% endif %}
+                    <p style="margin:16px 0 0 0;color:#94a3b8;font-size:11px;line-height:1.55;text-align:center;">
+                      Sent {{ generated_at }} · EVkids · human-reviewed, always.
+                    </p>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
-          {% endfor %}
-
-          <tr>
-            <td style="padding:20px 32px 28px 32px;color:#64748b;font-size:12px;line-height:1.55;">
-              Generated {{ generated_at }}. Reply to this email anytime — a human is always on the other end.
-              If these aren't landing, update your interests and we'll re-tune next week.
-            </td>
-          </tr>
         </table>
-        <div style="color:#94a3b8;font-size:11px;margin-top:12px;">EVkids Opportunities · human-in-the-loop, always.</div>
       </td>
     </tr>
   </table>

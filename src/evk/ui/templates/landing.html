@@ -67,6 +67,7 @@
         </div>
       </div>
       <form method="post" action="{{ request.url_for('auth_login') }}" class="relative z-10 mt-6 space-y-4">
+        {% include "_csrf_input.html" %}
         <label class="block">
           <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Email address</span>
           <input name="email" type="email" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="you@example.org" />
@@ -90,10 +91,12 @@
     {% else %}
     <section id="new-user" class="rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-lg shadow-slate-200/50">
       <div>
-        <h2 class="text-xl font-bold tracking-tight text-slate-900">New user</h2>
-        <p class="mt-1 text-sm font-medium text-slate-500">Create your account.</p>
+        <h2 class="text-xl font-bold tracking-tight text-slate-900">New student account</h2>
+        <p class="mt-1 text-sm font-medium text-slate-500">Create your account to track opportunities and outreach.</p>
       </div>
       <form method="post" action="{{ request.url_for('auth_signup') }}" class="mt-6 space-y-4">
+        {% include "_csrf_input.html" %}
+        <input type="hidden" name="role" value="student"/>
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="block">
             <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Full name</span>
@@ -104,20 +107,10 @@
             <input name="email" type="email" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="avery@example.org" />
           </label>
         </div>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="block">
-            <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Role</span>
-            <select name="role" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm appearance-none">
-              <option value="student">Student</option>
-              <option value="ngo_admin">NGO admin</option>
-              <option value="admin">Platform admin</option>
-            </select>
-          </label>
-          <label class="block">
-            <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Organization</span>
-            <input name="organization" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="School or NGO" />
-          </label>
-        </div>
+        <label class="block">
+          <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">School or organization <span class="font-normal normal-case tracking-normal text-slate-400">(optional)</span></span>
+          <input name="organization" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="Your school" />
+        </label>
         <label class="block">
           <span class="mb-2 block text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Password</span>
           <input name="access_key" type="password" required class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 outline-none transition-all duration-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-sm" placeholder="Create a secure password" />

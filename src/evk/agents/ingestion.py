@@ -1,7 +1,7 @@
 """Ingestion agent.
 
 Turns an Inkbox inbound message into a persisted `RawEmail` and kicks off
-classification → personalisation. Idempotent on Inkbox message id.
+classification → personalization. Idempotent on Inkbox message id.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from evk.models import (
 
 
 class IngestionAgent:
-    """Ingest → classify → persist opportunities → draft personalised messages."""
+    """Ingest → classify → persist opportunities → draft personalized messages."""
 
     def __init__(
         self,
@@ -59,7 +59,7 @@ class IngestionAgent:
             return raw
 
         # Publish-through threshold: low-confidence classifications are shelved
-        # to keep noisy / spammy newsletters from polluting the catalogue.
+        # to keep noisy / spammy newsletters from polluting the catalog.
         min_conf = get_settings().classifier_min_confidence
         if not result.is_opportunity or not result.opportunities or result.confidence < min_conf:
             self._repos.raw_emails.mark_status(
@@ -133,7 +133,7 @@ class IngestionAgent:
           "Google Summer of Code 2026") within a 30-day deadline window.
         """
         # Load once outside the loop — this is N reads, not N².
-        existing_catalogue = self._repos.opportunities.list_all()
+        existing_catalog = self._repos.opportunities.list_all()
         # Check whether the Gemini client supports embeddings (not a stub).
         gemini = get_gemini()
         _has_embeddings = hasattr(gemini, "generate_embedding")
@@ -149,7 +149,7 @@ class IngestionAgent:
                     logger.exception("ingestion.embedding_failed")
             stored, created = self._repos.opportunities.create_if_absent(opp)
             if created:
-                dup = find_duplicate(opp, existing_catalogue)
+                dup = find_duplicate(opp, existing_catalog)
                 if dup is not None:
                     logger.bind(
                         duplicate_of=dup.existing.id,
@@ -160,7 +160,7 @@ class IngestionAgent:
                     self._repos.opportunities.delete(opp.id)
                     persisted.append(dup.existing)
                     continue
-                existing_catalogue.append(stored)
+                existing_catalog.append(stored)
             persisted.append(stored)
         return persisted
 

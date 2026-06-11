@@ -1,6 +1,6 @@
 """Weekly digest agent — one email per student with their top-N matches.
 
-Differences from the per-opportunity personaliser:
+Differences from the per-opportunity personalizer:
 
 * **Grouped by student**, not by opportunity — one email, not N.
 * **No Gemini call** — the digest is assembled from deterministic copy via
@@ -72,6 +72,9 @@ class DigestAgent:
         drafts: list[DraftMessage] = []
 
         for student in students:
+            if not _digest_due(student, now):
+                logger.bind(student_id=student.id, week=week_key).info("digest.skipped_frequency")
+                continue
             picks = self._rank(student, available)
             if not picks:
                 logger.bind(student_id=student.id, week=week_key).info("digest.no_matches")
@@ -154,6 +157,19 @@ class DigestAgent:
 def _week_key(when: datetime) -> str:
     y, w, _ = when.isocalendar()
     return f"{y}W{w:02d}"
+
+
+def _digest_due(student: Student, when: datetime) -> bool:
+    """Respect student notification_frequency: weekly, biweekly, monthly."""
+    freq = (getattr(student, "notification_frequency", None) or "weekly").lower()
+    if freq in {"weekly", ""}:
+        return True
+    _, week_num, _ = when.isocalendar()
+    if freq == "biweekly":
+        return week_num % 2 == 0
+    if freq == "monthly":
+        return week_num % 4 == 1
+    return True
 
 
 def _draft_from_digest(draft_id: str, opp_id: str, digest: StudentDigest) -> DraftMessage:

@@ -3,7 +3,7 @@
 Stubs give you a fully-working pipeline with no credentials:
 
 * `StubGemini` is a deterministic regex+keyword classifier that produces
-  `ClassifierResult` and personalised-copy responses faithful to the real
+  `ClassifierResult` and personalized-copy responses faithful to the real
   schemas. Useful for demos, tests, and UI development.
 
 * `StubInkbox` logs every outbound "send" to a JSONL file so you can see
@@ -157,7 +157,7 @@ class StubGemini:
         schema_name = schema.__name__
         if schema_name == "ClassifierResult":
             return self._classify(prompt)  # type: ignore[return-value]
-        if schema_name == "_PersonalisedCopy":
+        if schema_name == "_PersonalizedCopy":
             return self._write_copy(prompt, schema)  # type: ignore[return-value]
         return schema.model_construct()  # type: ignore[return-value]
 
@@ -217,7 +217,7 @@ class StubGemini:
         student_name = _field_value(prompt, "First name:") or _field_value(prompt, "Name:")
         opp_title = _field_value(prompt, "Title:")
         opp_deadline = _field_value(prompt, "Deadline:")
-        opp_org = _field_value(prompt, "Organisation:")
+        opp_org = _field_value(prompt, "Organization:")
         opp_url = _field_value(prompt, "Link:")
         reasons = prompt.split("MATCH REASONS", 1)[1].strip() if "MATCH REASONS" in prompt else ""
 
