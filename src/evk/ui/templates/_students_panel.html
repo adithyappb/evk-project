@@ -45,6 +45,14 @@
               </button>
             </form>
             {% endif %}
+            <form method="post" action="{{ request.url_for('student_test_notification', student_id=s.id) }}" class="inline">
+              {% include "_csrf_input.html" %}
+              <button type="submit"
+                class="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700 transition">
+                Test {{ s.preferred_notification_method | title }}
+              </button>
+            </form>
+            <span class="text-[10px] text-slate-400">{{ s.preferred_notification_method | title }} · {{ s.notification_frequency | title }}</span>
           </div>
 
           {# ── Staff edit: school / level / graduation year (NGO admin + admin) ── #}

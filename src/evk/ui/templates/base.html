@@ -188,7 +188,10 @@
             <a href="{{ request.url_for('admin_kpi') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">KPI</a>
             {% elif current_user.role.value == 'ngo_admin' %}
             <a href="{{ request.url_for('ngo_dashboard') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Dashboard</a>
+            <a href="{{ request.url_for('drafts_page', status_filter='pending_approval') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Review Queue</a>
             <a href="{{ request.url_for('opportunities_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Opportunities</a>
+            <a href="{{ request.url_for('students_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Students</a>
+            <a href="{{ request.url_for('admin_kpi') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">KPI</a>
             {% elif current_user.role.value == 'student' %}
             <a href="{{ request.url_for('student_dashboard') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">My dashboard</a>
             <a href="{{ request.url_for('student_profile_page') }}" class="rounded-full border border-transparent bg-white px-3 py-1.5 font-bold text-slate-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-200 hover:shadow-md hover:text-slate-900 active:scale-95">Profile</a>
@@ -208,7 +211,7 @@
           {% if current_user %}
           <div class="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-600 shadow-sm sm:inline-flex">
             <span class="font-bold text-slate-900">{{ current_user.name }}</span>
-            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase font-bold tracking-[0.2em] text-slate-500">{{ current_user.role.value.replace('_', ' ') }}</span>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase font-bold tracking-[0.2em] text-slate-500">{{ current_user.role | role_label }}</span>
           </div>
           <form method="post" action="{{ request.url_for('logout') }}">
         {% include "_csrf_input.html" %}
@@ -238,7 +241,10 @@
           <a href="{{ request.url_for('admin_kpi') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">KPI</a>
           {% elif current_user.role.value == 'ngo_admin' %}
           <a href="{{ request.url_for('ngo_dashboard') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Dashboard</a>
+          <a href="{{ request.url_for('drafts_page', status_filter='pending_approval') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Review Queue</a>
           <a href="{{ request.url_for('opportunities_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Opportunities</a>
+          <a href="{{ request.url_for('students_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Students</a>
+          <a href="{{ request.url_for('admin_kpi') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">KPI</a>
           {% elif current_user.role.value == 'student' %}
           <a href="{{ request.url_for('student_dashboard') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My dashboard</a>
           <a href="{{ request.url_for('student_profile_page') }}" class="rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My profile</a>

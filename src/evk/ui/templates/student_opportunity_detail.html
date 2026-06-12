@@ -13,7 +13,7 @@
   </a>
 
   <div class="mt-5 flex flex-wrap items-center gap-2">
-    <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">{{ opp.kind.value }}</span>
+    <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">{{ opp.kind.value | title }}</span>
     {% if days_until is not none %}
       {% if days_until <= 7 %}
       <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">{{ days_until }} days left</span>
@@ -87,9 +87,10 @@
         <option value="" {% if not outcome %}selected{% endif %}>— Not started —</option>
         <option value="interested" {% if outcome and outcome.status == 'interested' %}selected{% endif %}>Interested</option>
         <option value="applied" {% if outcome and outcome.status == 'applied' %}selected{% endif %}>Applied</option>
-        <option value="interview" {% if outcome and outcome.status == 'interview' %}selected{% endif %}>Interview / next step</option>
-        <option value="won" {% if outcome and outcome.status == 'won' %}selected{% endif %}>Accepted / won</option>
-        <option value="passed" {% if outcome and outcome.status == 'passed' %}selected{% endif %}>Decided not to pursue</option>
+        <option value="interview" {% if outcome and outcome.status == 'interview' %}selected{% endif %}>Interview / Next Step</option>
+        <option value="won" {% if outcome and outcome.status == 'won' %}selected{% endif %}>Accepted / Won</option>
+        <option value="rejected" {% if outcome and outcome.status == 'rejected' %}selected{% endif %}>Rejected</option>
+        <option value="passed" {% if outcome and outcome.status == 'passed' %}selected{% endif %}>Decided Not to Pursue</option>
       </select>
       <label class="block text-xs font-semibold text-slate-600">Notes (optional)</label>
       <textarea name="notes" rows="3" placeholder="Anything you want your coordinator to know..."

@@ -94,6 +94,12 @@ def staff_required(user: AppUser | None) -> AppUser:
     return user
 
 
+def staff_or_ngo_required(user: AppUser | None) -> AppUser:
+    if user is None or user.role not in (UserRole.ADMIN, UserRole.NGO_ADMIN):
+        raise HTTPException(status_code=403, detail="staff access required")
+    return user
+
+
 # Backward-compatible aliases for tests and dependency overrides
 _repos_dep = repos_dep
 _inkbox_dep = inkbox_dep
@@ -107,6 +113,7 @@ _redirect = redirect
 _clear_session = clear_session
 _set_session_cookie = set_session_cookie
 _staff_required = staff_required
+_staff_or_ngo_required = staff_or_ngo_required
 
 __all__ = [
     "_auth_dep",

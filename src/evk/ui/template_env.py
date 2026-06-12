@@ -37,6 +37,18 @@ _LEVEL_LABELS = {
 }
 
 
+_ROLE_LABELS = {
+    "admin": "Admin",
+    "ngo_admin": "NGO Admin",
+    "student": "Student",
+}
+
+
+def role_label(role: object) -> str:
+    value = getattr(role, "value", role)
+    return _ROLE_LABELS.get(str(value), str(value).replace("_", " ").title())
+
+
 def level_label(level: object) -> str:
     value = getattr(level, "value", level)
     return _LEVEL_LABELS.get(str(value), str(value).replace("_", " "))
@@ -58,6 +70,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters["humandate"] = humandate
 templates.env.filters["humandatetime"] = humandatetime
 templates.env.filters["level_label"] = level_label
+templates.env.filters["role_label"] = role_label
 templates.env.globals["use_local_tailwind"] = use_local_tailwind
 templates.env.globals["tailwind_css_url"] = tailwind_css_url
 

@@ -30,6 +30,7 @@ from evk.ui.deps import (
     repos_dep,
     settings_dep,
     set_session_cookie,
+    staff_or_ngo_required,
     staff_required,
 )
 from evk.ui.helpers import allow_auth_resend, flash_redirect, parse_deadline_form, recommend_for_student
@@ -110,7 +111,7 @@ def drafts_page(
     repos: Repos = Depends(repos_dep),
     current_user: AppUser | None = Depends(current_user),
 ) -> HTMLResponse:
-    guard = staff_redirect(request, current_user)
+    guard = staff_or_ngo_redirect(request, current_user)
     if guard is not None:
         return guard
     assert current_user is not None
@@ -193,15 +194,36 @@ def admin_kpi(
     # "Students matched" is the backend signal; "emails sent" is the surfaced count.
     students_reached = len({d.student_id for d in sent_drafts})
 
+    # ── Live student outcome states (Bug 14 & 15) ─────────────────────────
+    all_students = repos.students.list_all()
+    student_states: dict[str, int] = {
+        "active_pending": 0,   # have applied/interested outcomes still open
+        "progressed": 0,       # interview or next step
+        "awarded": 0,          # won / accepted
+        "closed": 0,           # passed / rejected
+    }
+    for st in all_students:
+        for outcome in st.outcomes:
+            status = outcome.get("status", "")
+            if status in ("interested", "applied"):
+                student_states["active_pending"] += 1
+            elif status == "interview":
+                student_states["progressed"] += 1
+            elif status == "won":
+                student_states["awarded"] += 1
+            elif status in ("passed", "rejected"):
+                student_states["closed"] += 1
+
     ops = {
         "emails_ingested":  len(period_emails) if period != "all" else len(all_emails),
         "opps_classified":  len(active_opps),
         "opps_in_review":   sum(1 for o in all_opps if o.needs_review),
         "drafts_generated": len([d for d in all_drafts if _after_cutoff(d.created_at)]),
-        "drafts_approved":  len(approved),
         "emails_sent":      len(sent_drafts),
         "students_reached": students_reached,
         "avg_review_hours": avg_review_hours,
+        "student_states":   student_states,
+        "total_students":   len(all_students),
     }
 
     # ── Outcome tracking (file-backed) ───────────────────────────────────────
@@ -210,6 +232,21 @@ def admin_kpi(
         outcomes = _json.loads(kpi_file.read_text()) if kpi_file.exists() else []
     except Exception:
         outcomes = []
+
+    # ── Per-student live outcomes for admin management ─────────────────────
+    student_outcomes = []
+    opp_map = {o.id: o for o in all_opps}
+    for st in all_students:
+        for outcome in st.outcomes:
+            opp = opp_map.get(outcome.get("opp_id", ""))
+            student_outcomes.append({
+                "student_id": st.id,
+                "student_name": st.name,
+                "opp_id": outcome.get("opp_id", ""),
+                "opp_title": opp.title if opp else "Unknown",
+                "status": outcome.get("status", ""),
+                "updated_at": outcome.get("updated_at", ""),
+            })
 
     return templates.TemplateResponse(
         request,
@@ -221,6 +258,9 @@ def admin_kpi(
             "ops": ops,
             "outcomes": outcomes,
             "period": period,
+            "student_outcomes": student_outcomes,
+            "all_students": all_students,
+            "all_opps": [o for o in all_opps if not o.is_duplicate],
         },
     )
 
@@ -230,9 +270,9 @@ def admin_kpi_outcome_add(
     request: Request,
     period: str = Form(...),
     applications: str = Form(""),
-    interviews: str = Form(""),
-    scholarships: str = Form(""),
-    notes: str = Form(""),
+    progressed: str = Form(""),
+    awarded: str = Form(""),
+    rejected: str = Form(""),
     settings: Settings = Depends(settings_dep),
     current_user: AppUser | None = Depends(current_user),
 ) -> RedirectResponse:
@@ -246,9 +286,9 @@ def admin_kpi_outcome_add(
     outcomes.append({
         "period": period.strip(),
         "applications": applications.strip(),
-        "interviews": interviews.strip(),
-        "scholarships": scholarships.strip(),
-        "notes": notes.strip(),
+        "progressed": progressed.strip(),
+        "awarded": awarded.strip(),
+        "rejected": rejected.strip(),
     })
     kpi_file.write_text(_json.dumps(outcomes, indent=2))
     return redirect(request, "admin_kpi")
@@ -271,6 +311,33 @@ def admin_kpi_outcome_delete(
     if 0 <= idx < len(outcomes):
         outcomes.pop(idx)
         kpi_file.write_text(_json.dumps(outcomes, indent=2))
+    return redirect(request, "admin_kpi")
+
+
+@router.post("/admin/student-outcome", name="admin_student_outcome_save")
+def admin_student_outcome_save(
+    request: Request,
+    student_id: str = Form(...),
+    opp_id: str = Form(...),
+    status: str = Form(""),
+    repos: Repos = Depends(repos_dep),
+    current_user: AppUser | None = Depends(current_user),
+) -> RedirectResponse:
+    guard = staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    student = repos.students.get(student_id)
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    outcomes = [o for o in student.outcomes if o.get("opp_id") != opp_id]
+    if status:
+        outcomes.append({
+            "opp_id": opp_id,
+            "status": status,
+            "notes": f"Updated by {current_user.name}",
+            "updated_at": datetime.now(UTC).isoformat(),
+        })
+    repos.students.patch(student_id, {"outcomes": outcomes})
     return redirect(request, "admin_kpi")
 
 
@@ -764,7 +831,7 @@ def ui_drafts(
     repos: Repos = Depends(repos_dep),
     current_user: AppUser | None = Depends(current_user),
 ) -> HTMLResponse:
-    user = staff_required(current_user)
+    user = staff_or_ngo_required(current_user)
     return render_drafts_panel(request, repos, status_filter, user)
 
 
@@ -972,6 +1039,56 @@ def ui_simulate(
     return render_stats(request, repos, user, flash=flash)
 
 
+@router.post("/admin/students/add", name="student_manual_add")
+def student_manual_add(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    school_name: str = Form(""),
+    level: str = Form("other"),
+    repos: Repos = Depends(repos_dep),
+    current_user: AppUser | None = Depends(current_user),
+) -> RedirectResponse:
+    guard = staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    import secrets as _sec
+    from evk.auth import hash_access_key
+
+    email = email.strip().lower()
+    if repos.students.get_by_email(email):
+        return redirect(request, "students_page")
+    try:
+        lv = StudentLevel(level.strip()) if level.strip() else StudentLevel.OTHER
+    except ValueError:
+        lv = StudentLevel.OTHER
+    sid = f"student_{_sec.token_hex(6)}"
+    student = Student(
+        id=sid,
+        name=name.strip() or email.split("@")[0],
+        email=email,
+        level=lv,
+        school_name=school_name.strip(),
+        opted_in=False,
+    )
+    repos.students.upsert(student)
+    salt = _sec.token_hex(8)
+    tmp_pw = _sec.token_urlsafe(16)
+    user = AppUser(
+        id=f"user_student_{sid}",
+        email=email,
+        name=name.strip() or email.split("@")[0],
+        role=UserRole.STUDENT,
+        organization=school_name.strip(),
+        student_id=sid,
+        access_key_salt=salt,
+        access_key_hash=hash_access_key(tmp_pw, salt=salt),
+        is_active=False,
+    )
+    repos.users.upsert(user)
+    return redirect(request, "students_page")
+
+
 @router.post("/admin/students/import", name="students_import")
 async def students_import(
     request: Request,
@@ -1028,6 +1145,43 @@ async def students_import(
             is_active=False,
         )
         repos.users.upsert(user)
+    return redirect(request, "students_page")
+
+
+@router.post("/admin/students/{student_id}/test-notification", name="student_test_notification")
+def student_test_notification(
+    student_id: str,
+    request: Request,
+    repos: Repos = Depends(repos_dep),
+    inkbox: InkboxClient = Depends(get_inkbox),
+    current_user: AppUser | None = Depends(current_user),
+) -> RedirectResponse:
+    guard = staff_or_ngo_redirect(request, current_user)
+    if guard is not None:
+        return guard
+    student = repos.students.get(student_id)
+    if student is None:
+        raise HTTPException(status_code=404)
+    method = student.preferred_notification_method
+    first_name = student.name.split()[0] if student.name else "there"
+    try:
+        if method in ("whatsapp", "sms") and student.phone:
+            from evk.twilio_client import TwilioClient
+            twilio = TwilioClient()
+            if method == "whatsapp":
+                twilio.send_whatsapp(to=student.phone, body=f"[EVkids Test] Hi {first_name}, this is a test to confirm WhatsApp delivery is working.")
+            else:
+                twilio.send_sms(to=student.phone, body=f"[EVkids Test] Hi {first_name}, this is a test to confirm SMS delivery is working.")
+        else:
+            inkbox.send(
+                to=[student.email],
+                subject="[EVkids Test] Notification test",
+                body_text=f"Hi {first_name},\n\nThis is a test notification from EVkids to confirm your email delivery is working.\n\nMethod: {method}\nFrequency: {student.notification_frequency}\n\n— EVkids Team",
+                body_html="",
+            )
+        logger.bind(student_id=student_id, method=method).info("test_notification.sent")
+    except Exception as exc:
+        logger.bind(student_id=student_id, error=str(exc)).warning("test_notification.failed")
     return redirect(request, "students_page")
 
 

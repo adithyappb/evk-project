@@ -99,6 +99,17 @@
         </label>
         {% endfor %}
       </div>
+
+      {# Reminder timing #}
+      <h3 class="mt-6 text-sm font-semibold text-slate-800">Deadline reminders</h3>
+      <p class="mt-1 text-xs text-slate-500">You'll receive reminders at <strong class="text-slate-700">7 days</strong> and <strong class="text-slate-700">2 days</strong> before each opportunity deadline, via your chosen method above.</p>
+
+      {% if student %}
+      <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+        <span class="font-semibold text-slate-800">Current settings:</span>
+        {{ student.preferred_notification_method | title }} · {{ student.notification_frequency | title }}{% if student.phone %} · Phone: {{ student.phone }}{% endif %}
+      </div>
+      {% endif %}
     </div>
 
     {# Bio #}

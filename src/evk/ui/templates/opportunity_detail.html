@@ -10,7 +10,7 @@
   </a>
 
   <div class="mt-5 flex flex-wrap items-start gap-3">
-    <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">{{ opp.kind.value }}</span>
+    <span class="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">{{ opp.kind.value | title }}</span>
     {% if days_until is not none %}
       {% if days_until <= 7 %}
       <span class="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">{{ days_until }}d left</span>
@@ -212,7 +212,7 @@
             <select name="kind" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100">
               {% for k in ['scholarship','internship','hackathon','competition','conference','fellowship',
                            'job','career fair','job training','summer job','college support','grant','program','other'] %}
-              <option value="{{ k }}" {% if opp.kind.value == k %}selected{% endif %}>{{ k }}</option>
+              <option value="{{ k }}" {% if opp.kind.value == k %}selected{% endif %}>{{ k | title }}</option>
               {% endfor %}
             </select>
           </div>

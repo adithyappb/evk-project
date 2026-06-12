@@ -141,7 +141,7 @@ def test_recommendations_use_match_scores(polish_client, fake_repos, student_und
     service.ensure_bootstrap()
     _login(client, notifier, student_undergrad.email, get_settings().auth_local_demo_password)
     body = client.get("/app/student").text
-    assert "Matched for you" in body
+    assert "Recommended for you" in body
     assert student_undergrad.name.split()[0] in body
     assert "Opportunities picked for you" in body
     assert opp_hackathon.title in body

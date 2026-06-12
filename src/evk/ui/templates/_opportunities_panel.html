@@ -41,7 +41,7 @@
         </div>
         <div class="min-w-0 flex-1">
           <div class="truncate font-medium text-slate-900 transition group-hover:text-brand-700">{{ o.title }}</div>
-          <div class="truncate text-xs text-slate-500">{{ o.kind.value }} · {{ o.organization }}{% if o.match_score is not none %} · <span class="font-semibold text-emerald-700">{{ (o.match_score * 100)|int }}% fit</span>{% endif %}</div>
+          <div class="truncate text-xs text-slate-500">{{ o.kind.value | title }} · {{ o.organization }}{% if o.match_score is not none %} · <span class="font-semibold text-emerald-700">{{ (o.match_score * 100)|int }}% fit</span>{% endif %}</div>
         </div>
         <svg class="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </a>
