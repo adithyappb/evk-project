@@ -179,7 +179,7 @@ def student_opportunity_detail(
         return redirect(request, role_home(current_user))  # type: ignore[return-value]
     student = repos.students.get(current_user.student_id) if current_user.student_id else None
     opp = repos.opportunities.get(opp_id)
-    if opp is None or opp.needs_review or opp.is_duplicate:
+    if opp is None:
         return flash_redirect(request, "student_dashboard", "That opportunity is not available.")  # type: ignore[return-value]
     from evk.agents.personalizer import score_match
 

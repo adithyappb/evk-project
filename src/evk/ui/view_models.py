@@ -17,7 +17,6 @@ from evk.ui.deps import redirect
 from evk.ui.template_env import templates
 
 STATUS_TABS: list[tuple[str, str]] = [
-    ("Parsed", "parsed"),
     ("Pending", "pending_approval"),
     ("Approved", "approved"),
     ("Sent", "sent"),
@@ -25,7 +24,7 @@ STATUS_TABS: list[tuple[str, str]] = [
     ("Failed", "failed"),
 ]
 
-_STATUS_LITERAL = Literal["parsed", "pending_approval", "approved", "sent", "rejected", "failed"]
+_STATUS_LITERAL = Literal["pending_approval", "approved", "sent", "rejected", "failed"]
 
 
 @dataclass(slots=True)
@@ -146,29 +145,12 @@ def dashboard_context(repos: Repos, current_user: AppUser) -> dict[str, object]:
 
 
 def render_drafts(request: Request, repos: Repos, active_status: str) -> HTMLResponse:
-    if active_status == "parsed":
-        opps = repos.opportunities.list_all(limit=100)
-        drafts = [
-            DraftMessage(
-                id=f"parsed_{opp.id}",
-                student_id="unassigned",
-                opportunity_id=opp.id,
-                to_email="N/A",
-                subject=opp.title,
-                body_text=opp.summary,
-                match_score=0.0,
-                status=DraftStatus.PENDING_APPROVAL,
-            )
-            for opp in opps
-            if not opp.is_duplicate
-        ]
-    else:
-        try:
-            status = DraftStatus(active_status)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="invalid status") from exc
-        drafts = repos.drafts.list_by_status(status, limit=200)
-        drafts.sort(key=lambda draft: draft.created_at, reverse=True)
+    try:
+        status = DraftStatus(active_status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid status") from exc
+    drafts = repos.drafts.list_by_status(status, limit=200)
+    drafts.sort(key=lambda draft: draft.created_at, reverse=True)
     opportunity_map = {
         draft.opportunity_id: repos.opportunities.get(draft.opportunity_id) for draft in drafts
     }
